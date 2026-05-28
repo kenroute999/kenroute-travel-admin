@@ -477,7 +477,234 @@ function BookingsPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      <NewBookingSheet
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        existingRoutes={routes}
+        onCreate={(b) => {
+          setRows((prev) => [b, ...prev]);
+          toast.success(`Booking ${b.id} created for ${b.passenger}`);
+        }}
+      />
     </>
+  );
+}
+
+interface NewBookingSheetProps {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  existingRoutes: string[];
+  onCreate: (b: Booking) => void;
+}
+
+const AVATAR_TONES = [
+  "bg-emerald-100 text-emerald-700",
+  "bg-pink-100 text-pink-700",
+  "bg-blue-100 text-blue-700",
+  "bg-violet-100 text-violet-700",
+  "bg-amber-100 text-amber-700",
+  "bg-rose-100 text-rose-700",
+  "bg-sky-100 text-sky-700",
+];
+
+function NewBookingSheet({ open, onOpenChange, existingRoutes, onCreate }: NewBookingSheetProps) {
+  const [passenger, setPassenger] = useState("");
+  const [phone, setPhone] = useState("");
+  const [gender, setGender] = useState<"Male" | "Female">("Male");
+  const [age, setAge] = useState("");
+  const [idProof, setIdProof] = useState("Aadhar Card");
+  const [from, setFrom] = useState("Hyderabad");
+  const [to, setTo] = useState("Bangalore");
+  const [boarding, setBoarding] = useState("");
+  const [dropping, setDropping] = useState("");
+  const [bus, setBus] = useState("");
+  const [busName, setBusName] = useState("Volvo B11R");
+  const [seat, setSeat] = useState("");
+  const [seatType, setSeatType] = useState<"Lower" | "Upper">("Lower");
+  const [journey, setJourney] = useState("");
+  const [depart, setDepart] = useState("");
+  const [arrive, setArrive] = useState("");
+  const [amount, setAmount] = useState("");
+  const [payment, setPayment] = useState<PaymentStatus>("Paid");
+  const [status, setStatus] = useState<BookingStatus>("Confirmed");
+
+  const reset = () => {
+    setPassenger(""); setPhone(""); setAge(""); setBoarding(""); setDropping("");
+    setBus(""); setSeat(""); setJourney(""); setDepart(""); setArrive(""); setAmount("");
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passenger || !phone || !from || !to || !amount) {
+      toast.error("Please fill in passenger, route and amount");
+      return;
+    }
+    const id = `KR-${Math.floor(10428 + Math.random() * 999)}`;
+    const initials = passenger.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+    const newBooking: Booking = {
+      id,
+      pnr: `KENR-${id.replace("KR-", "")}-${Date.now().toString().slice(-6)}`,
+      passenger, phone, gender,
+      age: Number(age) || 25,
+      idProof, from, to,
+      boarding: boarding || from,
+      dropping: dropping || to,
+      bus: bus || "TS 09 XX 0000",
+      busName,
+      seat: seat || "L1",
+      seatType,
+      journey: journey || new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+      depart: depart || "08:00 PM",
+      arrive: arrive || "06:00 AM",
+      duration: "9h 30m",
+      amount: Number(amount),
+      payment, status,
+      initials,
+      avatarTone: AVATAR_TONES[Math.floor(Math.random() * AVATAR_TONES.length)],
+    };
+    onCreate(newBooking);
+    reset();
+    onOpenChange(false);
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full sm:max-w-xl flex flex-col p-0 gap-0">
+        <SheetHeader className="p-5 border-b border-border space-y-0">
+          <SheetTitle className="flex items-center gap-2 text-lg">
+            <Plus className="size-5 text-brand" />
+            Create New Booking
+          </SheetTitle>
+          <p className="text-xs text-muted-foreground mt-1">Fill in the passenger and journey details to issue a ticket.</p>
+        </SheetHeader>
+
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-6">
+          <section className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Passenger</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Full Name *"><Input value={passenger} onChange={(e) => setPassenger(e.target.value)} placeholder="Anil Kumar" className="h-10 rounded-lg" /></Field>
+              <Field label="Phone *"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" className="h-10 rounded-lg" /></Field>
+              <Field label="Gender">
+                <Select value={gender} onValueChange={(v) => setGender(v as "Male" | "Female")}>
+                  <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Male">Male</SelectItem>
+                    <SelectItem value="Female">Female</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Age"><Input type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="28" className="h-10 rounded-lg" /></Field>
+              <Field label="ID Proof">
+                <Select value={idProof} onValueChange={setIdProof}>
+                  <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Aadhar Card">Aadhar Card</SelectItem>
+                    <SelectItem value="PAN Card">PAN Card</SelectItem>
+                    <SelectItem value="Driving License">Driving License</SelectItem>
+                    <SelectItem value="Passport">Passport</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Journey</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="From *"><Input value={from} onChange={(e) => setFrom(e.target.value)} placeholder="Hyderabad" className="h-10 rounded-lg" /></Field>
+              <Field label="To *"><Input value={to} onChange={(e) => setTo(e.target.value)} placeholder="Bangalore" className="h-10 rounded-lg" /></Field>
+              <Field label="Boarding Point"><Input value={boarding} onChange={(e) => setBoarding(e.target.value)} placeholder="Ameerpet" className="h-10 rounded-lg" /></Field>
+              <Field label="Dropping Point"><Input value={dropping} onChange={(e) => setDropping(e.target.value)} placeholder="Silk Board" className="h-10 rounded-lg" /></Field>
+              <Field label="Journey Date"><Input value={journey} onChange={(e) => setJourney(e.target.value)} placeholder="20 May 2025" className="h-10 rounded-lg" /></Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Departure"><Input value={depart} onChange={(e) => setDepart(e.target.value)} placeholder="08:00 PM" className="h-10 rounded-lg" /></Field>
+                <Field label="Arrival"><Input value={arrive} onChange={(e) => setArrive(e.target.value)} placeholder="05:30 AM" className="h-10 rounded-lg" /></Field>
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bus & Seat</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Bus Number"><Input value={bus} onChange={(e) => setBus(e.target.value)} placeholder="TS 09 AB 1234" className="h-10 rounded-lg" /></Field>
+              <Field label="Bus Name">
+                <Select value={busName} onValueChange={setBusName}>
+                  <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Volvo B11R">Volvo B11R</SelectItem>
+                    <SelectItem value="Volvo B8R">Volvo B8R</SelectItem>
+                    <SelectItem value="Scania Metrolink">Scania Metrolink</SelectItem>
+                    <SelectItem value="Scania MultiAxle">Scania MultiAxle</SelectItem>
+                    <SelectItem value="Benz Dreamz">Benz Dreamz</SelectItem>
+                    <SelectItem value="Benz AC Sleeper">Benz AC Sleeper</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Seat No."><Input value={seat} onChange={(e) => setSeat(e.target.value)} placeholder="L3" className="h-10 rounded-lg" /></Field>
+              <Field label="Seat Type">
+                <Select value={seatType} onValueChange={(v) => setSeatType(v as "Lower" | "Upper")}>
+                  <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Lower">Lower</SelectItem>
+                    <SelectItem value="Upper">Upper</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Payment</h3>
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Amount (₹) *"><Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="1250" className="h-10 rounded-lg" /></Field>
+              <Field label="Payment">
+                <Select value={payment} onValueChange={(v) => setPayment(v as PaymentStatus)}>
+                  <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Paid">Paid</SelectItem>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                    <SelectItem value="Refunded">Refunded</SelectItem>
+                    <SelectItem value="Failed">Failed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Status">
+                <Select value={status} onValueChange={(v) => setStatus(v as BookingStatus)}>
+                  <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Confirmed">Confirmed</SelectItem>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                    <SelectItem value="Cancelled">Cancelled</SelectItem>
+                    <SelectItem value="Completed">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+            {existingRoutes.length > 0 && (
+              <p className="text-xs text-muted-foreground">Tip: existing routes include {existingRoutes.slice(0, 3).join(", ")}.</p>
+            )}
+          </section>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+            <Button type="button" variant="outline" className="h-10 rounded-xl" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" className="h-10 rounded-xl bg-brand text-brand-foreground hover:bg-brand/90">
+              <CheckCircle2 className="size-4" />
+              Create Booking
+            </Button>
+          </div>
+        </form>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
+      {children}
+    </div>
   );
 }
 
