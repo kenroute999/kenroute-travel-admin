@@ -9,8 +9,56 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SeatLayoutsRouteImport } from './routes/seat-layouts'
+import { Route as RoutesRouteImport } from './routes/routes'
+import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as DriversRouteImport } from './routes/drivers'
+import { Route as BusesRouteImport } from './routes/buses'
+import { Route as BookingsRouteImport } from './routes/bookings'
+import { Route as AgentsRouteImport } from './routes/agents'
 import { Route as IndexRouteImport } from './routes/index'
 
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SeatLayoutsRoute = SeatLayoutsRouteImport.update({
+  id: '/seat-layouts',
+  path: '/seat-layouts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RoutesRoute = RoutesRouteImport.update({
+  id: '/routes',
+  path: '/routes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DriversRoute = DriversRouteImport.update({
+  id: '/drivers',
+  path: '/drivers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BusesRoute = BusesRouteImport.update({
+  id: '/buses',
+  path: '/buses',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BookingsRoute = BookingsRouteImport.update({
+  id: '/bookings',
+  path: '/bookings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentsRoute = AgentsRouteImport.update({
+  id: '/agents',
+  path: '/agents',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +67,144 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agents': typeof AgentsRoute
+  '/bookings': typeof BookingsRoute
+  '/buses': typeof BusesRoute
+  '/drivers': typeof DriversRoute
+  '/reports': typeof ReportsRoute
+  '/routes': typeof RoutesRoute
+  '/seat-layouts': typeof SeatLayoutsRoute
+  '/settings': typeof SettingsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agents': typeof AgentsRoute
+  '/bookings': typeof BookingsRoute
+  '/buses': typeof BusesRoute
+  '/drivers': typeof DriversRoute
+  '/reports': typeof ReportsRoute
+  '/routes': typeof RoutesRoute
+  '/seat-layouts': typeof SeatLayoutsRoute
+  '/settings': typeof SettingsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agents': typeof AgentsRoute
+  '/bookings': typeof BookingsRoute
+  '/buses': typeof BusesRoute
+  '/drivers': typeof DriversRoute
+  '/reports': typeof ReportsRoute
+  '/routes': typeof RoutesRoute
+  '/seat-layouts': typeof SeatLayoutsRoute
+  '/settings': typeof SettingsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/agents'
+    | '/bookings'
+    | '/buses'
+    | '/drivers'
+    | '/reports'
+    | '/routes'
+    | '/seat-layouts'
+    | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/agents'
+    | '/bookings'
+    | '/buses'
+    | '/drivers'
+    | '/reports'
+    | '/routes'
+    | '/seat-layouts'
+    | '/settings'
+  id:
+    | '__root__'
+    | '/'
+    | '/agents'
+    | '/bookings'
+    | '/buses'
+    | '/drivers'
+    | '/reports'
+    | '/routes'
+    | '/seat-layouts'
+    | '/settings'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgentsRoute: typeof AgentsRoute
+  BookingsRoute: typeof BookingsRoute
+  BusesRoute: typeof BusesRoute
+  DriversRoute: typeof DriversRoute
+  ReportsRoute: typeof ReportsRoute
+  RoutesRoute: typeof RoutesRoute
+  SeatLayoutsRoute: typeof SeatLayoutsRoute
+  SettingsRoute: typeof SettingsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/seat-layouts': {
+      id: '/seat-layouts'
+      path: '/seat-layouts'
+      fullPath: '/seat-layouts'
+      preLoaderRoute: typeof SeatLayoutsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/routes': {
+      id: '/routes'
+      path: '/routes'
+      fullPath: '/routes'
+      preLoaderRoute: typeof RoutesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/drivers': {
+      id: '/drivers'
+      path: '/drivers'
+      fullPath: '/drivers'
+      preLoaderRoute: typeof DriversRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/buses': {
+      id: '/buses'
+      path: '/buses'
+      fullPath: '/buses'
+      preLoaderRoute: typeof BusesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bookings': {
+      id: '/bookings'
+      path: '/bookings'
+      fullPath: '/bookings'
+      preLoaderRoute: typeof BookingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agents': {
+      id: '/agents'
+      path: '/agents'
+      fullPath: '/agents'
+      preLoaderRoute: typeof AgentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,6 +217,14 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgentsRoute: AgentsRoute,
+  BookingsRoute: BookingsRoute,
+  BusesRoute: BusesRoute,
+  DriversRoute: DriversRoute,
+  ReportsRoute: ReportsRoute,
+  RoutesRoute: RoutesRoute,
+  SeatLayoutsRoute: SeatLayoutsRoute,
+  SettingsRoute: SettingsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
