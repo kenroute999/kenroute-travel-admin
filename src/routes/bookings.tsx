@@ -130,7 +130,8 @@ function PaymentBadge({ status }: { status: PaymentStatus }) {
 }
 
 function BookingsPage() {
-  const [rows] = useState<Booking[]>(initial);
+  const [rows, setRows] = useState<Booking[]>(initial);
+  const [createOpen, setCreateOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [routeFilter, setRouteFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
