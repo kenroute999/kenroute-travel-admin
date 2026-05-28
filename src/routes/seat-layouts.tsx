@@ -669,12 +669,13 @@ function SeatDetailsCard({
           <Row
             label="Status"
             valueNode={
-              <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium", `text-${seat.status === "female" ? "pink-600" : seat.status === "booked" ? "danger" : seat.status === "blocked" ? "muted-foreground" : "success"}`)}>
+              <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium border", meta.chip)}>
                 <span className={cn("size-1.5 rounded-full", meta.dot)} />
                 {meta.label}
               </span>
             }
           />
+
           <Row label="Gender Restriction" value={seat.status === "female" ? "Female Only" : "None"} />
           <Row label="Availability" value={seat.status === "available" ? "Open" : seat.status === "blocked" ? "Unavailable" : "Reserved"} />
           {seat.passenger && <Row label="Passenger Name" value={seat.passenger} />}
