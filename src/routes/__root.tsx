@@ -92,6 +92,7 @@ function RootComponent() {
           </main>
         </div>
       </div>
+      <Toaster />
     </QueryClientProvider>
   );
 }
