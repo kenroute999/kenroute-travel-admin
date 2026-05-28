@@ -168,7 +168,7 @@ function BookingsPage() {
               <Download className="size-4" />
               Export
             </Button>
-            <Button className="bg-brand text-brand-foreground hover:bg-brand/90 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 h-10 px-4 rounded-xl">
+            <Button onClick={() => setCreateOpen(true)} className="bg-brand text-brand-foreground hover:bg-brand/90 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 h-10 px-4 rounded-xl">
               <Plus className="size-4" />
               New Booking
             </Button>
