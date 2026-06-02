@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Bus,
@@ -7,6 +8,7 @@ import {
   Users,
   Plug,
   RefreshCw,
+  Loader2,
   CheckCircle2,
   Activity,
   TrendingUp,
@@ -34,6 +36,16 @@ import {
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatCard } from "@/components/ui/stat-card";
 import { cn } from "@/lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -122,6 +134,19 @@ const totalRev = revenueSources.reduce((s, x) => s + x.value, 0);
 const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 
 function Dashboard() {
+  const [syncing, setSyncing] = useState<Record<string, boolean>>({});
+  const [confirmAction, setConfirmAction] = useState<{ ota: string; action: "sync" | "retry" } | null>(null);
+
+  const confirmAndRun = () => {
+    if (!confirmAction) return;
+    const { ota } = confirmAction;
+    setConfirmAction(null);
+    setSyncing((prev) => ({ ...prev, [ota]: true }));
+    setTimeout(() => {
+      setSyncing((prev) => ({ ...prev, [ota]: false }));
+    }, 2000);
+  };
+
   return (
     <>
       <PageHeader
@@ -145,48 +170,69 @@ function Dashboard() {
 
       {/* OTA Integration Status */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        {otaIntegrations.map((ota) => (
-          <div
-            key={ota.name}
-            className="bg-card rounded-2xl border border-border p-5 shadow-sm hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div
-                  className="size-11 rounded-xl flex items-center justify-center text-white font-bold"
-                  style={{ background: ota.color }}
-                >
-                  {ota.name[0]}
-                </div>
-                <div>
-                  <div className="font-semibold text-base">{ota.name}</div>
-                  <div className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                    <Plug className="size-3" /> OTA Integration
+        {otaIntegrations.map((ota) => {
+          const isSyncing = syncing[ota.name];
+          return (
+            <div
+              key={ota.name}
+              className="bg-card rounded-2xl border border-border p-5 shadow-sm hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="size-11 rounded-xl flex items-center justify-center text-white font-bold"
+                    style={{ background: ota.color }}
+                  >
+                    {ota.name[0]}
+                  </div>
+                  <div>
+                    <div className="font-semibold text-base">{ota.name}</div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                      <Plug className="size-3" /> OTA Integration
+                    </div>
                   </div>
                 </div>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-success/15 text-success border border-success/20 px-2.5 py-1 text-xs font-semibold">
+                  <CheckCircle2 className="size-3.5" /> Connected
+                </span>
               </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-success/15 text-success border border-success/20 px-2.5 py-1 text-xs font-semibold">
-                <CheckCircle2 className="size-3.5" /> Connected
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-xl border border-border bg-muted/30 p-3">
-                <div className="text-xs text-muted-foreground flex items-center gap-1">
-                  <RefreshCw className="size-3" /> Last Sync
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="rounded-xl border border-border bg-muted/30 p-3">
+                  <div className="text-xs text-muted-foreground flex items-center gap-1">
+                    <RefreshCw className={cn("size-3", isSyncing && "animate-spin")} /> Last Sync
+                  </div>
+                  <div className="text-sm font-semibold mt-1">{ota.lastSync}</div>
                 </div>
-                <div className="text-sm font-semibold mt-1">{ota.lastSync}</div>
+                <div className="rounded-xl border border-border bg-muted/30 p-3">
+                  <div className="text-xs text-muted-foreground">Today's Bookings</div>
+                  <div className="text-sm font-semibold mt-1">{ota.bookings}</div>
+                </div>
+                <div className="rounded-xl border border-border bg-muted/30 p-3">
+                  <div className="text-xs text-muted-foreground">Revenue</div>
+                  <div className="text-sm font-semibold mt-1">{ota.revenue}</div>
+                </div>
               </div>
-              <div className="rounded-xl border border-border bg-muted/30 p-3">
-                <div className="text-xs text-muted-foreground">Today's Bookings</div>
-                <div className="text-sm font-semibold mt-1">{ota.bookings}</div>
-              </div>
-              <div className="rounded-xl border border-border bg-muted/30 p-3">
-                <div className="text-xs text-muted-foreground">Revenue</div>
-                <div className="text-sm font-semibold mt-1">{ota.revenue}</div>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={isSyncing}
+                  onClick={() => setConfirmAction({ ota: ota.name, action: "sync" })}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand text-white px-3 py-2 text-xs font-semibold hover:bg-brand/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isSyncing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                  Sync Inventory
+                </button>
+                <button
+                  disabled={isSyncing}
+                  onClick={() => setConfirmAction({ ota: ota.name, action: "retry" })}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card text-foreground px-3 py-2 text-xs font-semibold hover:bg-muted/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isSyncing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                  Retry Failed
+                </button>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Trends */}
@@ -344,6 +390,26 @@ function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Sync/Retry Confirmation */}
+      <AlertDialog open={!!confirmAction}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmAction?.action === "sync" ? "Sync Inventory" : "Retry Failed Bookings"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to {confirmAction?.action === "sync" ? "sync inventory" : "retry failed bookings"} for {confirmAction?.ota}?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmAction(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmAndRun} className="bg-brand hover:bg-brand/90">
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
