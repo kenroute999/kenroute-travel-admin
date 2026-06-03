@@ -20,7 +20,14 @@ import {
   XCircle,
   Eye,
   X,
+  Globe,
+  Users,
+  Building2,
+  UserCog,
+  TrendingUp,
+  PieChart as PieIcon,
 } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatCard } from "@/components/ui/stat-card";
 import {
