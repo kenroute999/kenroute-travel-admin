@@ -62,10 +62,12 @@ export const Route = createFileRoute("/bookings")({
 
 type BookingStatus = "Confirmed" | "Pending" | "Cancelled" | "Completed";
 type PaymentStatus = "Paid" | "Pending" | "Refunded" | "Failed";
+type BookingSource = "redBus" | "AbhiBus" | "Agent" | "Counter" | "Website";
 
 interface Booking {
   id: string;
   pnr: string;
+  source: BookingSource;
   passenger: string;
   phone: string;
   gender: "Male" | "Female";
@@ -91,13 +93,13 @@ interface Booking {
 }
 
 const initial: Booking[] = [
-  { id: "KR-10421", pnr: "KENR-10421-250520", passenger: "Anil Kumar", phone: "+91 98765 43210", gender: "Male", age: 32, idProof: "Aadhar Card", from: "Hyderabad", to: "Bangalore", boarding: "Ameerpet", dropping: "Silk Board", bus: "TS 09 AB 1234", busName: "Volvo B11R", seat: "L3", seatType: "Lower", journey: "20 May 2025", depart: "08:00 PM", arrive: "05:30 AM", duration: "9h 30m", amount: 1250, payment: "Paid", status: "Confirmed", initials: "AK", avatarTone: "bg-emerald-100 text-emerald-700" },
-  { id: "KR-10422", pnr: "KENR-10422-250520", passenger: "Sneha Rao", phone: "+91 91234 56789", gender: "Female", age: 28, idProof: "PAN Card", from: "Hyderabad", to: "Vijayawada", boarding: "Miyapur", dropping: "Benz Circle", bus: "TS 09 CD 5678", busName: "Scania Metrolink", seat: "U7", seatType: "Upper", journey: "20 May 2025", depart: "06:00 AM", arrive: "12:00 PM", duration: "6h 00m", amount: 650, payment: "Paid", status: "Confirmed", initials: "SR", avatarTone: "bg-pink-100 text-pink-700" },
-  { id: "KR-10423", pnr: "KENR-10423-250521", passenger: "Vikram Singh", phone: "+91 99876 54321", gender: "Male", age: 41, idProof: "Aadhar Card", from: "Bangalore", to: "Chennai", boarding: "Silk Board", dropping: "Koyambedu", bus: "KA 01 AB 2222", busName: "Volvo B11R", seat: "L1", seatType: "Lower", journey: "21 May 2025", depart: "07:00 PM", arrive: "03:30 AM", duration: "8h 30m", amount: 890, payment: "Pending", status: "Pending", initials: "VS", avatarTone: "bg-blue-100 text-blue-700" },
-  { id: "KR-10424", pnr: "KENR-10424-250521", passenger: "Pooja Reddy", phone: "+91 93456 78901", gender: "Female", age: 26, idProof: "Aadhar Card", from: "Hyderabad", to: "Chennai", boarding: "LB Nagar", dropping: "Koyambedu", bus: "TS 09 EF 9101", busName: "Benz Dreamz", seat: "U4", seatType: "Upper", journey: "21 May 2025", depart: "09:00 PM", arrive: "07:00 AM", duration: "10h 00m", amount: 1420, payment: "Paid", status: "Cancelled", initials: "PR", avatarTone: "bg-violet-100 text-violet-700" },
-  { id: "KR-10425", pnr: "KENR-10425-250522", passenger: "Karthik Iyer", phone: "+91 90000 11122", gender: "Male", age: 35, idProof: "Driving License", from: "Visakhapatnam", to: "Hyderabad", boarding: "MVP Colony", dropping: "Kukatpally", bus: "AP 39 GH 1122", busName: "Volvo B8R", seat: "L9", seatType: "Lower", journey: "22 May 2025", depart: "08:30 PM", arrive: "06:30 AM", duration: "10h 00m", amount: 1180, payment: "Paid", status: "Completed", initials: "KI", avatarTone: "bg-amber-100 text-amber-700" },
-  { id: "KR-10426", pnr: "KENR-10426-250522", passenger: "Ramesh Babu", phone: "+91 97888 66554", gender: "Male", age: 49, idProof: "Aadhar Card", from: "Hyderabad", to: "Tirupati", boarding: "Miyapur", dropping: "Tirupati", bus: "TS 09 IJ 3344", busName: "Benz AC Sleeper", seat: "U8", seatType: "Upper", journey: "22 May 2025", depart: "06:30 AM", arrive: "06:00 PM", duration: "11h 30m", amount: 900, payment: "Pending", status: "Pending", initials: "RB", avatarTone: "bg-orange-100 text-orange-700" },
-  { id: "KR-10427", pnr: "KENR-10427-250522", passenger: "Lakshmi Devi", phone: "+91 99663 22114", gender: "Female", age: 38, idProof: "Aadhar Card", from: "Hyderabad", to: "Bangalore", boarding: "Ameerpet", dropping: "Silk Board", bus: "TS 09 KL 7788", busName: "Scania MultiAxle", seat: "L5", seatType: "Lower", journey: "22 May 2025", depart: "11:30 PM", arrive: "09:00 AM", duration: "9h 30m", amount: 1300, payment: "Paid", status: "Confirmed", initials: "LD", avatarTone: "bg-rose-100 text-rose-700" },
+  { id: "KR-10421", pnr: "KENR-10421-250520", source: "redBus", passenger: "Anil Kumar", phone: "+91 98765 43210", gender: "Male", age: 32, idProof: "Aadhar Card", from: "Hyderabad", to: "Bangalore", boarding: "Ameerpet", dropping: "Silk Board", bus: "TS 09 AB 1234", busName: "Volvo B11R", seat: "L3", seatType: "Lower", journey: "20 May 2025", depart: "08:00 PM", arrive: "05:30 AM", duration: "9h 30m", amount: 1250, payment: "Paid", status: "Confirmed", initials: "AK", avatarTone: "bg-emerald-100 text-emerald-700" },
+  { id: "KR-10422", pnr: "KENR-10422-250520", source: "AbhiBus", passenger: "Sneha Rao", phone: "+91 91234 56789", gender: "Female", age: 28, idProof: "PAN Card", from: "Hyderabad", to: "Vijayawada", boarding: "Miyapur", dropping: "Benz Circle", bus: "TS 09 CD 5678", busName: "Scania Metrolink", seat: "U7", seatType: "Upper", journey: "20 May 2025", depart: "06:00 AM", arrive: "12:00 PM", duration: "6h 00m", amount: 650, payment: "Paid", status: "Confirmed", initials: "SR", avatarTone: "bg-pink-100 text-pink-700" },
+  { id: "KR-10423", pnr: "KENR-10423-250521", source: "Agent", passenger: "Vikram Singh", phone: "+91 99876 54321", gender: "Male", age: 41, idProof: "Aadhar Card", from: "Bangalore", to: "Chennai", boarding: "Silk Board", dropping: "Koyambedu", bus: "KA 01 AB 2222", busName: "Volvo B11R", seat: "L1", seatType: "Lower", journey: "21 May 2025", depart: "07:00 PM", arrive: "03:30 AM", duration: "8h 30m", amount: 890, payment: "Pending", status: "Pending", initials: "VS", avatarTone: "bg-blue-100 text-blue-700" },
+  { id: "KR-10424", pnr: "KENR-10424-250521", source: "Counter", passenger: "Pooja Reddy", phone: "+91 93456 78901", gender: "Female", age: 26, idProof: "Aadhar Card", from: "Hyderabad", to: "Chennai", boarding: "LB Nagar", dropping: "Koyambedu", bus: "TS 09 EF 9101", busName: "Benz Dreamz", seat: "U4", seatType: "Upper", journey: "21 May 2025", depart: "09:00 PM", arrive: "07:00 AM", duration: "10h 00m", amount: 1420, payment: "Paid", status: "Cancelled", initials: "PR", avatarTone: "bg-violet-100 text-violet-700" },
+  { id: "KR-10425", pnr: "KENR-10425-250522", source: "Website", passenger: "Karthik Iyer", phone: "+91 90000 11122", gender: "Male", age: 35, idProof: "Driving License", from: "Visakhapatnam", to: "Hyderabad", boarding: "MVP Colony", dropping: "Kukatpally", bus: "AP 39 GH 1122", busName: "Volvo B8R", seat: "L9", seatType: "Lower", journey: "22 May 2025", depart: "08:30 PM", arrive: "06:30 AM", duration: "10h 00m", amount: 1180, payment: "Paid", status: "Completed", initials: "KI", avatarTone: "bg-amber-100 text-amber-700" },
+  { id: "KR-10426", pnr: "KENR-10426-250522", source: "redBus", passenger: "Ramesh Babu", phone: "+91 97888 66554", gender: "Male", age: 49, idProof: "Aadhar Card", from: "Hyderabad", to: "Tirupati", boarding: "Miyapur", dropping: "Tirupati", bus: "TS 09 IJ 3344", busName: "Benz AC Sleeper", seat: "U8", seatType: "Upper", journey: "22 May 2025", depart: "06:30 AM", arrive: "06:00 PM", duration: "11h 30m", amount: 900, payment: "Pending", status: "Pending", initials: "RB", avatarTone: "bg-orange-100 text-orange-700" },
+  { id: "KR-10427", pnr: "KENR-10427-250522", source: "AbhiBus", passenger: "Lakshmi Devi", phone: "+91 99663 22114", gender: "Female", age: 38, idProof: "Aadhar Card", from: "Hyderabad", to: "Bangalore", boarding: "Ameerpet", dropping: "Silk Board", bus: "TS 09 KL 7788", busName: "Scania MultiAxle", seat: "L5", seatType: "Lower", journey: "22 May 2025", depart: "11:30 PM", arrive: "09:00 AM", duration: "9h 30m", amount: 1300, payment: "Paid", status: "Confirmed", initials: "LD", avatarTone: "bg-rose-100 text-rose-700" },
 ];
 
 const bookingStatusStyles: Record<BookingStatus, string> = {
@@ -119,6 +121,27 @@ const paymentStyles: Record<PaymentStatus, string> = {
   Refunded: "bg-slate-100 text-slate-700 border-slate-200",
   Failed: "bg-rose-50 text-rose-700 border-rose-200",
 };
+
+const SOURCE_META: Record<BookingSource, { color: string; chip: string; icon: typeof Globe; tint: string }> = {
+  redBus:  { color: "#e63946", chip: "bg-rose-50 text-rose-700 border-rose-200",         icon: Globe,     tint: "bg-rose-100 text-rose-600" },
+  AbhiBus: { color: "#7c3aed", chip: "bg-violet-50 text-violet-700 border-violet-200",   icon: Globe,     tint: "bg-violet-100 text-violet-600" },
+  Agent:   { color: "#10b981", chip: "bg-emerald-50 text-emerald-700 border-emerald-200",icon: UserCog,   tint: "bg-emerald-100 text-emerald-600" },
+  Counter: { color: "#f59e0b", chip: "bg-orange-50 text-orange-700 border-orange-200",   icon: Building2, tint: "bg-orange-100 text-orange-600" },
+  Website: { color: "#3b82f6", chip: "bg-sky-50 text-sky-700 border-sky-200",            icon: Globe,     tint: "bg-sky-100 text-sky-600" },
+};
+
+const SOURCE_ORDER: BookingSource[] = ["redBus", "AbhiBus", "Agent", "Counter", "Website"];
+
+function SourceBadge({ source }: { source: BookingSource }) {
+  const meta = SOURCE_META[source];
+  const Icon = meta.icon;
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border", meta.chip)}>
+      <Icon className="size-3" />
+      {source}
+    </span>
+  );
+}
 
 function StatusBadge({ status }: { status: BookingStatus }) {
   return (
