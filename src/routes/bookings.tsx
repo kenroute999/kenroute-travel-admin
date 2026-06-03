@@ -166,6 +166,8 @@ function BookingsPage() {
   const [routeFilter, setRouteFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Booking | null>(null);
 
@@ -175,17 +177,32 @@ function BookingsPage() {
   }, []);
 
   const routes = useMemo(() => Array.from(new Set(rows.map((r) => `${r.from} → ${r.to}`))), [rows]);
+  const journeyDates = useMemo(() => Array.from(new Set(rows.map((r) => r.journey))), [rows]);
+
+  // Realistic OTA-scale aggregates (mocked for dashboard feel)
+  const sourceTotals: Record<BookingSource, { count: number; revenue: number }> = {
+    redBus:  { count: 512, revenue: 345670 },
+    AbhiBus: { count: 276, revenue: 210430 },
+    Agent:   { count: 245, revenue: 165230 },
+    Counter: { count: 142, revenue: 95450 },
+    Website: { count:  79, revenue: 28450 },
+  };
+  const totalBookings = SOURCE_ORDER.reduce((s, k) => s + sourceTotals[k].count, 0);
+  const totalRevenue  = SOURCE_ORDER.reduce((s, k) => s + sourceTotals[k].revenue, 0);
+  const pieData = SOURCE_ORDER.map((k) => ({ name: k, value: sourceTotals[k].count, color: SOURCE_META[k].color }));
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
       const q = query.trim().toLowerCase();
-      const matchesQ = !q || r.id.toLowerCase().includes(q) || r.passenger.toLowerCase().includes(q) || r.phone.toLowerCase().includes(q);
+      const matchesQ = !q || r.id.toLowerCase().includes(q) || r.pnr.toLowerCase().includes(q) || r.passenger.toLowerCase().includes(q) || r.phone.toLowerCase().includes(q);
       const matchesR = routeFilter === "all" || `${r.from} → ${r.to}` === routeFilter;
       const matchesS = statusFilter === "all" || r.status === statusFilter;
       const matchesP = paymentFilter === "all" || r.payment === paymentFilter;
-      return matchesQ && matchesR && matchesS && matchesP;
+      const matchesSrc = sourceFilter === "all" || r.source === sourceFilter;
+      const matchesD = dateFilter === "all" || r.journey === dateFilter;
+      return matchesQ && matchesR && matchesS && matchesP && matchesSrc && matchesD;
     });
-  }, [rows, query, routeFilter, statusFilter, paymentFilter]);
+  }, [rows, query, routeFilter, statusFilter, paymentFilter, sourceFilter, dateFilter]);
 
   return (
     <>
@@ -208,12 +225,119 @@ function BookingsPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
-        <StatCard label="Total Bookings" value="3,256" delta="12% this month" icon={Ticket} tone="brand" />
-        <StatCard label="Today Bookings" value="48" delta="8 from yesterday" icon={Calendar} tone="navy" />
-        <StatCard label="Confirmed" value="2,856" delta="87.7%" icon={TicketCheck} tone="brand" />
-        <StatCard label="Cancelled" value="245" delta="7.5%" icon={TicketX} tone="danger" />
-        <StatCard label="Revenue Today" value="₹68,450" delta="15% vs yesterday" icon={Wallet} tone="info" />
+        <StatCard label="Total Bookings" value="1,254" delta="12.5% from yesterday" icon={Ticket} tone="brand" />
+        <StatCard label="Confirmed Bookings" value="1,089" delta="10.3% from yesterday" icon={TicketCheck} tone="brand" />
+        <StatCard label="Cancelled Bookings" value="165" delta="5.6% from yesterday" icon={TicketX} tone="danger" />
+        <StatCard label="Revenue Generated" value="₹8,45,230" delta="14.2% from yesterday" icon={Wallet} tone="navy" />
+        <StatCard label="Occupancy Rate" value="78.4%" delta="8.6% from yesterday" icon={TrendingUp} tone="info" />
       </div>
+
+      {/* Source analytics */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-6">
+        {/* Source mini cards */}
+        <div className="xl:col-span-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {SOURCE_ORDER.map((src) => {
+            const meta = SOURCE_META[src];
+            const Icon = meta.icon;
+            const data = sourceTotals[src];
+            const pct = ((data.count / totalBookings) * 100).toFixed(1);
+            return (
+              <div key={src} className="bg-card rounded-2xl border border-border p-4 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-center gap-3">
+                  <div className={cn("size-10 rounded-xl flex items-center justify-center shrink-0", meta.tint)}>
+                    <Icon className="size-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground truncate">{src} Bookings</p>
+                    <p className="text-xl font-bold tracking-tight">{data.count.toLocaleString()}</p>
+                    <p className="text-[11px] text-muted-foreground">{pct}%</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Pie chart */}
+        <div className="xl:col-span-4 bg-card rounded-2xl border border-border p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
+              <PieIcon className="size-4 text-brand" />
+              Booking Source Distribution
+            </h3>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="relative w-[160px] h-[160px] shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={pieData} dataKey="value" innerRadius={48} outerRadius={72} paddingAngle={2} stroke="hsl(var(--background))" strokeWidth={2}>
+                    {pieData.map((d) => <Cell key={d.name} fill={d.color} />)}
+                  </Pie>
+                  <Tooltip
+                    formatter={(v: number, n) => [`${v.toLocaleString()} bookings`, n]}
+                    contentStyle={{ borderRadius: 10, border: "1px solid hsl(var(--border))", fontSize: 12 }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</span>
+                <span className="text-lg font-bold tracking-tight">{totalBookings.toLocaleString()}</span>
+              </div>
+            </div>
+            <ul className="flex-1 space-y-1.5 text-sm min-w-0">
+              {pieData.map((d) => {
+                const pct = ((d.value / totalBookings) * 100).toFixed(1);
+                return (
+                  <li key={d.name} className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span className="size-2.5 rounded-sm shrink-0" style={{ background: d.color }} />
+                      <span className="truncate">{d.name}</span>
+                    </span>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {pct}% <span className="text-foreground/60">({d.value})</span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
+
+        {/* Revenue by source */}
+        <div className="xl:col-span-3 bg-card rounded-2xl border border-border p-5 shadow-sm">
+          <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+            <Wallet className="size-4 text-brand" />
+            Revenue by Source
+          </h3>
+          <ul className="space-y-2.5 text-sm">
+            {SOURCE_ORDER.map((src) => {
+              const meta = SOURCE_META[src];
+              const Icon = meta.icon;
+              const rev = sourceTotals[src].revenue;
+              const pct = ((rev / totalRevenue) * 100).toFixed(1);
+              return (
+                <li key={src} className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className={cn("size-7 rounded-md flex items-center justify-center shrink-0", meta.tint)}>
+                      <Icon className="size-3.5" />
+                    </span>
+                    <span className="truncate font-medium">{src}</span>
+                  </span>
+                  <span className="text-right">
+                    <span className="block font-semibold tabular-nums">₹{rev.toLocaleString()}</span>
+                    <span className="block text-[11px] text-muted-foreground tabular-nums">{pct}%</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Total Revenue</span>
+            <span className="font-bold text-brand">₹{totalRevenue.toLocaleString()}</span>
+          </div>
+        </div>
+      </div>
+
 
       {/* Table card */}
       <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
