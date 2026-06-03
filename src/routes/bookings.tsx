@@ -539,7 +539,10 @@ function BookingsPage() {
           {selected && (
             <div className="flex-1 overflow-y-auto p-5 space-y-5">
               <div className="text-center">
-                <StatusBadge status={selected.status} />
+                <div className="flex items-center justify-center gap-2">
+                  <StatusBadge status={selected.status} />
+                  <SourceBadge source={selected.source} />
+                </div>
                 <div className="mt-2 text-lg font-bold tracking-tight">{selected.id}</div>
                 <div className="text-xs text-muted-foreground">PNR: {selected.pnr}</div>
               </div>
