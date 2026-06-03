@@ -400,14 +400,15 @@ function BookingsPage() {
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[1200px]">
+          <table className="w-full text-sm min-w-[1400px]">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground bg-muted/40">
                 <th className="px-5 py-3.5 font-semibold">Booking ID</th>
+                <th className="px-5 py-3.5 font-semibold">Source</th>
                 <th className="px-5 py-3.5 font-semibold">Passenger</th>
+                <th className="px-5 py-3.5 font-semibold">Mobile</th>
                 <th className="px-5 py-3.5 font-semibold">Route</th>
                 <th className="px-5 py-3.5 font-semibold">Boarding</th>
-                <th className="px-5 py-3.5 font-semibold">Bus</th>
                 <th className="px-5 py-3.5 font-semibold">Seat</th>
                 <th className="px-5 py-3.5 font-semibold">Journey</th>
                 <th className="px-5 py-3.5 font-semibold">Amount</th>
@@ -420,14 +421,18 @@ function BookingsPage() {
               {loading
                 ? Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i} className="border-t border-border">
-                      {Array.from({ length: 11 }).map((__, j) => (
+                      {Array.from({ length: 12 }).map((__, j) => (
                         <td key={j} className="px-5 py-4"><Skeleton className="h-5 w-full max-w-[120px]" /></td>
                       ))}
                     </tr>
                   ))
                 : filtered.map((r) => (
                     <tr key={r.id} className="border-t border-border transition-colors hover:bg-brand/[0.04] group">
-                      <td className="px-5 py-4 font-semibold text-foreground">{r.id}</td>
+                      <td className="px-5 py-4">
+                        <div className="font-semibold text-foreground">{r.id}</div>
+                        <div className="text-[11px] text-muted-foreground font-mono">PNR {r.pnr.slice(-10)}</div>
+                      </td>
+                      <td className="px-5 py-4"><SourceBadge source={r.source} /></td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <div className={cn("size-9 rounded-full flex items-center justify-center font-semibold text-xs shrink-0", r.avatarTone)}>
@@ -435,32 +440,25 @@ function BookingsPage() {
                           </div>
                           <div className="min-w-0">
                             <div className="font-medium text-foreground">{r.passenger}</div>
-                            <div className="text-xs text-muted-foreground">{r.phone}</div>
+                            <div className="text-[11px] text-muted-foreground">{r.gender} • {r.age}y</div>
                           </div>
                         </div>
                       </td>
+                      <td className="px-5 py-4 text-sm tabular-nums text-muted-foreground whitespace-nowrap">{r.phone}</td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-1.5 font-medium">
                           <span>{r.from}</span>
                           <ArrowRight className="size-3.5 text-brand" />
                           <span>{r.to}</span>
                         </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">{r.boarding} → {r.dropping}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{r.bus} • {r.busName}</div>
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-1.5 text-sm">
                           <MapPin className="size-3.5 text-brand" />
                           {r.boarding}
                         </div>
-                      </td>
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-2">
-                          <BusFront className="size-4 text-navy" />
-                          <div>
-                            <div className="font-medium text-foreground">{r.bus}</div>
-                            <div className="text-xs text-muted-foreground">{r.busName}</div>
-                          </div>
-                        </div>
+                        <div className="text-[11px] text-muted-foreground mt-0.5">→ {r.dropping}</div>
                       </td>
                       <td className="px-5 py-4">
                         <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-100">
