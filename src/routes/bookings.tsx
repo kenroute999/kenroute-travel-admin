@@ -694,6 +694,7 @@ function NewBookingSheet({ open, onOpenChange, existingRoutes, onCreate }: NewBo
   const [amount, setAmount] = useState("");
   const [payment, setPayment] = useState<PaymentStatus>("Paid");
   const [status, setStatus] = useState<BookingStatus>("Confirmed");
+  const [source, setSource] = useState<BookingSource>("Counter");
 
   const reset = () => {
     setPassenger(""); setPhone(""); setAge(""); setBoarding(""); setDropping("");
@@ -711,6 +712,7 @@ function NewBookingSheet({ open, onOpenChange, existingRoutes, onCreate }: NewBo
     const newBooking: Booking = {
       id,
       pnr: `KENR-${id.replace("KR-", "")}-${Date.now().toString().slice(-6)}`,
+      source,
       passenger, phone, gender,
       age: Number(age) || 25,
       idProof, from, to,
