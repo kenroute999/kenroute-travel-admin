@@ -20,7 +20,13 @@ import {
   XCircle,
   Eye,
   X,
+  Globe,
+  Building2,
+  UserCog,
+  TrendingUp,
+  PieChart as PieIcon,
 } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatCard } from "@/components/ui/stat-card";
 import {
@@ -55,10 +61,12 @@ export const Route = createFileRoute("/bookings")({
 
 type BookingStatus = "Confirmed" | "Pending" | "Cancelled" | "Completed";
 type PaymentStatus = "Paid" | "Pending" | "Refunded" | "Failed";
+type BookingSource = "redBus" | "AbhiBus" | "Agent" | "Counter" | "Website";
 
 interface Booking {
   id: string;
   pnr: string;
+  source: BookingSource;
   passenger: string;
   phone: string;
   gender: "Male" | "Female";
@@ -84,13 +92,13 @@ interface Booking {
 }
 
 const initial: Booking[] = [
-  { id: "KR-10421", pnr: "KENR-10421-250520", passenger: "Anil Kumar", phone: "+91 98765 43210", gender: "Male", age: 32, idProof: "Aadhar Card", from: "Hyderabad", to: "Bangalore", boarding: "Ameerpet", dropping: "Silk Board", bus: "TS 09 AB 1234", busName: "Volvo B11R", seat: "L3", seatType: "Lower", journey: "20 May 2025", depart: "08:00 PM", arrive: "05:30 AM", duration: "9h 30m", amount: 1250, payment: "Paid", status: "Confirmed", initials: "AK", avatarTone: "bg-emerald-100 text-emerald-700" },
-  { id: "KR-10422", pnr: "KENR-10422-250520", passenger: "Sneha Rao", phone: "+91 91234 56789", gender: "Female", age: 28, idProof: "PAN Card", from: "Hyderabad", to: "Vijayawada", boarding: "Miyapur", dropping: "Benz Circle", bus: "TS 09 CD 5678", busName: "Scania Metrolink", seat: "U7", seatType: "Upper", journey: "20 May 2025", depart: "06:00 AM", arrive: "12:00 PM", duration: "6h 00m", amount: 650, payment: "Paid", status: "Confirmed", initials: "SR", avatarTone: "bg-pink-100 text-pink-700" },
-  { id: "KR-10423", pnr: "KENR-10423-250521", passenger: "Vikram Singh", phone: "+91 99876 54321", gender: "Male", age: 41, idProof: "Aadhar Card", from: "Bangalore", to: "Chennai", boarding: "Silk Board", dropping: "Koyambedu", bus: "KA 01 AB 2222", busName: "Volvo B11R", seat: "L1", seatType: "Lower", journey: "21 May 2025", depart: "07:00 PM", arrive: "03:30 AM", duration: "8h 30m", amount: 890, payment: "Pending", status: "Pending", initials: "VS", avatarTone: "bg-blue-100 text-blue-700" },
-  { id: "KR-10424", pnr: "KENR-10424-250521", passenger: "Pooja Reddy", phone: "+91 93456 78901", gender: "Female", age: 26, idProof: "Aadhar Card", from: "Hyderabad", to: "Chennai", boarding: "LB Nagar", dropping: "Koyambedu", bus: "TS 09 EF 9101", busName: "Benz Dreamz", seat: "U4", seatType: "Upper", journey: "21 May 2025", depart: "09:00 PM", arrive: "07:00 AM", duration: "10h 00m", amount: 1420, payment: "Paid", status: "Cancelled", initials: "PR", avatarTone: "bg-violet-100 text-violet-700" },
-  { id: "KR-10425", pnr: "KENR-10425-250522", passenger: "Karthik Iyer", phone: "+91 90000 11122", gender: "Male", age: 35, idProof: "Driving License", from: "Visakhapatnam", to: "Hyderabad", boarding: "MVP Colony", dropping: "Kukatpally", bus: "AP 39 GH 1122", busName: "Volvo B8R", seat: "L9", seatType: "Lower", journey: "22 May 2025", depart: "08:30 PM", arrive: "06:30 AM", duration: "10h 00m", amount: 1180, payment: "Paid", status: "Completed", initials: "KI", avatarTone: "bg-amber-100 text-amber-700" },
-  { id: "KR-10426", pnr: "KENR-10426-250522", passenger: "Ramesh Babu", phone: "+91 97888 66554", gender: "Male", age: 49, idProof: "Aadhar Card", from: "Hyderabad", to: "Tirupati", boarding: "Miyapur", dropping: "Tirupati", bus: "TS 09 IJ 3344", busName: "Benz AC Sleeper", seat: "U8", seatType: "Upper", journey: "22 May 2025", depart: "06:30 AM", arrive: "06:00 PM", duration: "11h 30m", amount: 900, payment: "Pending", status: "Pending", initials: "RB", avatarTone: "bg-orange-100 text-orange-700" },
-  { id: "KR-10427", pnr: "KENR-10427-250522", passenger: "Lakshmi Devi", phone: "+91 99663 22114", gender: "Female", age: 38, idProof: "Aadhar Card", from: "Hyderabad", to: "Bangalore", boarding: "Ameerpet", dropping: "Silk Board", bus: "TS 09 KL 7788", busName: "Scania MultiAxle", seat: "L5", seatType: "Lower", journey: "22 May 2025", depart: "11:30 PM", arrive: "09:00 AM", duration: "9h 30m", amount: 1300, payment: "Paid", status: "Confirmed", initials: "LD", avatarTone: "bg-rose-100 text-rose-700" },
+  { id: "KR-10421", pnr: "KENR-10421-250520", source: "redBus", passenger: "Anil Kumar", phone: "+91 98765 43210", gender: "Male", age: 32, idProof: "Aadhar Card", from: "Hyderabad", to: "Bangalore", boarding: "Ameerpet", dropping: "Silk Board", bus: "TS 09 AB 1234", busName: "Volvo B11R", seat: "L3", seatType: "Lower", journey: "20 May 2025", depart: "08:00 PM", arrive: "05:30 AM", duration: "9h 30m", amount: 1250, payment: "Paid", status: "Confirmed", initials: "AK", avatarTone: "bg-emerald-100 text-emerald-700" },
+  { id: "KR-10422", pnr: "KENR-10422-250520", source: "AbhiBus", passenger: "Sneha Rao", phone: "+91 91234 56789", gender: "Female", age: 28, idProof: "PAN Card", from: "Hyderabad", to: "Vijayawada", boarding: "Miyapur", dropping: "Benz Circle", bus: "TS 09 CD 5678", busName: "Scania Metrolink", seat: "U7", seatType: "Upper", journey: "20 May 2025", depart: "06:00 AM", arrive: "12:00 PM", duration: "6h 00m", amount: 650, payment: "Paid", status: "Confirmed", initials: "SR", avatarTone: "bg-pink-100 text-pink-700" },
+  { id: "KR-10423", pnr: "KENR-10423-250521", source: "Agent", passenger: "Vikram Singh", phone: "+91 99876 54321", gender: "Male", age: 41, idProof: "Aadhar Card", from: "Bangalore", to: "Chennai", boarding: "Silk Board", dropping: "Koyambedu", bus: "KA 01 AB 2222", busName: "Volvo B11R", seat: "L1", seatType: "Lower", journey: "21 May 2025", depart: "07:00 PM", arrive: "03:30 AM", duration: "8h 30m", amount: 890, payment: "Pending", status: "Pending", initials: "VS", avatarTone: "bg-blue-100 text-blue-700" },
+  { id: "KR-10424", pnr: "KENR-10424-250521", source: "Counter", passenger: "Pooja Reddy", phone: "+91 93456 78901", gender: "Female", age: 26, idProof: "Aadhar Card", from: "Hyderabad", to: "Chennai", boarding: "LB Nagar", dropping: "Koyambedu", bus: "TS 09 EF 9101", busName: "Benz Dreamz", seat: "U4", seatType: "Upper", journey: "21 May 2025", depart: "09:00 PM", arrive: "07:00 AM", duration: "10h 00m", amount: 1420, payment: "Paid", status: "Cancelled", initials: "PR", avatarTone: "bg-violet-100 text-violet-700" },
+  { id: "KR-10425", pnr: "KENR-10425-250522", source: "Website", passenger: "Karthik Iyer", phone: "+91 90000 11122", gender: "Male", age: 35, idProof: "Driving License", from: "Visakhapatnam", to: "Hyderabad", boarding: "MVP Colony", dropping: "Kukatpally", bus: "AP 39 GH 1122", busName: "Volvo B8R", seat: "L9", seatType: "Lower", journey: "22 May 2025", depart: "08:30 PM", arrive: "06:30 AM", duration: "10h 00m", amount: 1180, payment: "Paid", status: "Completed", initials: "KI", avatarTone: "bg-amber-100 text-amber-700" },
+  { id: "KR-10426", pnr: "KENR-10426-250522", source: "redBus", passenger: "Ramesh Babu", phone: "+91 97888 66554", gender: "Male", age: 49, idProof: "Aadhar Card", from: "Hyderabad", to: "Tirupati", boarding: "Miyapur", dropping: "Tirupati", bus: "TS 09 IJ 3344", busName: "Benz AC Sleeper", seat: "U8", seatType: "Upper", journey: "22 May 2025", depart: "06:30 AM", arrive: "06:00 PM", duration: "11h 30m", amount: 900, payment: "Pending", status: "Pending", initials: "RB", avatarTone: "bg-orange-100 text-orange-700" },
+  { id: "KR-10427", pnr: "KENR-10427-250522", source: "AbhiBus", passenger: "Lakshmi Devi", phone: "+91 99663 22114", gender: "Female", age: 38, idProof: "Aadhar Card", from: "Hyderabad", to: "Bangalore", boarding: "Ameerpet", dropping: "Silk Board", bus: "TS 09 KL 7788", busName: "Scania MultiAxle", seat: "L5", seatType: "Lower", journey: "22 May 2025", depart: "11:30 PM", arrive: "09:00 AM", duration: "9h 30m", amount: 1300, payment: "Paid", status: "Confirmed", initials: "LD", avatarTone: "bg-rose-100 text-rose-700" },
 ];
 
 const bookingStatusStyles: Record<BookingStatus, string> = {
@@ -112,6 +120,27 @@ const paymentStyles: Record<PaymentStatus, string> = {
   Refunded: "bg-slate-100 text-slate-700 border-slate-200",
   Failed: "bg-rose-50 text-rose-700 border-rose-200",
 };
+
+const SOURCE_META: Record<BookingSource, { color: string; chip: string; icon: typeof Globe; tint: string }> = {
+  redBus:  { color: "#e63946", chip: "bg-rose-50 text-rose-700 border-rose-200",         icon: Globe,     tint: "bg-rose-100 text-rose-600" },
+  AbhiBus: { color: "#7c3aed", chip: "bg-violet-50 text-violet-700 border-violet-200",   icon: Globe,     tint: "bg-violet-100 text-violet-600" },
+  Agent:   { color: "#10b981", chip: "bg-emerald-50 text-emerald-700 border-emerald-200",icon: UserCog,   tint: "bg-emerald-100 text-emerald-600" },
+  Counter: { color: "#f59e0b", chip: "bg-orange-50 text-orange-700 border-orange-200",   icon: Building2, tint: "bg-orange-100 text-orange-600" },
+  Website: { color: "#3b82f6", chip: "bg-sky-50 text-sky-700 border-sky-200",            icon: Globe,     tint: "bg-sky-100 text-sky-600" },
+};
+
+const SOURCE_ORDER: BookingSource[] = ["redBus", "AbhiBus", "Agent", "Counter", "Website"];
+
+function SourceBadge({ source }: { source: BookingSource }) {
+  const meta = SOURCE_META[source];
+  const Icon = meta.icon;
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border", meta.chip)}>
+      <Icon className="size-3" />
+      {source}
+    </span>
+  );
+}
 
 function StatusBadge({ status }: { status: BookingStatus }) {
   return (
@@ -136,6 +165,8 @@ function BookingsPage() {
   const [routeFilter, setRouteFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Booking | null>(null);
 
@@ -145,17 +176,32 @@ function BookingsPage() {
   }, []);
 
   const routes = useMemo(() => Array.from(new Set(rows.map((r) => `${r.from} → ${r.to}`))), [rows]);
+  const journeyDates = useMemo(() => Array.from(new Set(rows.map((r) => r.journey))), [rows]);
+
+  // Realistic OTA-scale aggregates (mocked for dashboard feel)
+  const sourceTotals: Record<BookingSource, { count: number; revenue: number }> = {
+    redBus:  { count: 512, revenue: 345670 },
+    AbhiBus: { count: 276, revenue: 210430 },
+    Agent:   { count: 245, revenue: 165230 },
+    Counter: { count: 142, revenue: 95450 },
+    Website: { count:  79, revenue: 28450 },
+  };
+  const totalBookings = SOURCE_ORDER.reduce((s, k) => s + sourceTotals[k].count, 0);
+  const totalRevenue  = SOURCE_ORDER.reduce((s, k) => s + sourceTotals[k].revenue, 0);
+  const pieData = SOURCE_ORDER.map((k) => ({ name: k, value: sourceTotals[k].count, color: SOURCE_META[k].color }));
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
       const q = query.trim().toLowerCase();
-      const matchesQ = !q || r.id.toLowerCase().includes(q) || r.passenger.toLowerCase().includes(q) || r.phone.toLowerCase().includes(q);
+      const matchesQ = !q || r.id.toLowerCase().includes(q) || r.pnr.toLowerCase().includes(q) || r.passenger.toLowerCase().includes(q) || r.phone.toLowerCase().includes(q);
       const matchesR = routeFilter === "all" || `${r.from} → ${r.to}` === routeFilter;
       const matchesS = statusFilter === "all" || r.status === statusFilter;
       const matchesP = paymentFilter === "all" || r.payment === paymentFilter;
-      return matchesQ && matchesR && matchesS && matchesP;
+      const matchesSrc = sourceFilter === "all" || r.source === sourceFilter;
+      const matchesD = dateFilter === "all" || r.journey === dateFilter;
+      return matchesQ && matchesR && matchesS && matchesP && matchesSrc && matchesD;
     });
-  }, [rows, query, routeFilter, statusFilter, paymentFilter]);
+  }, [rows, query, routeFilter, statusFilter, paymentFilter, sourceFilter, dateFilter]);
 
   return (
     <>
@@ -178,12 +224,119 @@ function BookingsPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
-        <StatCard label="Total Bookings" value="3,256" delta="12% this month" icon={Ticket} tone="brand" />
-        <StatCard label="Today Bookings" value="48" delta="8 from yesterday" icon={Calendar} tone="navy" />
-        <StatCard label="Confirmed" value="2,856" delta="87.7%" icon={TicketCheck} tone="brand" />
-        <StatCard label="Cancelled" value="245" delta="7.5%" icon={TicketX} tone="danger" />
-        <StatCard label="Revenue Today" value="₹68,450" delta="15% vs yesterday" icon={Wallet} tone="info" />
+        <StatCard label="Total Bookings" value="1,254" delta="12.5% from yesterday" icon={Ticket} tone="brand" />
+        <StatCard label="Confirmed Bookings" value="1,089" delta="10.3% from yesterday" icon={TicketCheck} tone="brand" />
+        <StatCard label="Cancelled Bookings" value="165" delta="5.6% from yesterday" icon={TicketX} tone="danger" />
+        <StatCard label="Revenue Generated" value="₹8,45,230" delta="14.2% from yesterday" icon={Wallet} tone="navy" />
+        <StatCard label="Occupancy Rate" value="78.4%" delta="8.6% from yesterday" icon={TrendingUp} tone="info" />
       </div>
+
+      {/* Source analytics */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-6">
+        {/* Source mini cards */}
+        <div className="xl:col-span-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {SOURCE_ORDER.map((src) => {
+            const meta = SOURCE_META[src];
+            const Icon = meta.icon;
+            const data = sourceTotals[src];
+            const pct = ((data.count / totalBookings) * 100).toFixed(1);
+            return (
+              <div key={src} className="bg-card rounded-2xl border border-border p-4 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-center gap-3">
+                  <div className={cn("size-10 rounded-xl flex items-center justify-center shrink-0", meta.tint)}>
+                    <Icon className="size-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground truncate">{src} Bookings</p>
+                    <p className="text-xl font-bold tracking-tight">{data.count.toLocaleString()}</p>
+                    <p className="text-[11px] text-muted-foreground">{pct}%</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Pie chart */}
+        <div className="xl:col-span-4 bg-card rounded-2xl border border-border p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
+              <PieIcon className="size-4 text-brand" />
+              Booking Source Distribution
+            </h3>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="relative w-[160px] h-[160px] shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={pieData} dataKey="value" innerRadius={48} outerRadius={72} paddingAngle={2} stroke="hsl(var(--background))" strokeWidth={2}>
+                    {pieData.map((d) => <Cell key={d.name} fill={d.color} />)}
+                  </Pie>
+                  <Tooltip
+                    formatter={(v: number, n) => [`${v.toLocaleString()} bookings`, n]}
+                    contentStyle={{ borderRadius: 10, border: "1px solid hsl(var(--border))", fontSize: 12 }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</span>
+                <span className="text-lg font-bold tracking-tight">{totalBookings.toLocaleString()}</span>
+              </div>
+            </div>
+            <ul className="flex-1 space-y-1.5 text-sm min-w-0">
+              {pieData.map((d) => {
+                const pct = ((d.value / totalBookings) * 100).toFixed(1);
+                return (
+                  <li key={d.name} className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span className="size-2.5 rounded-sm shrink-0" style={{ background: d.color }} />
+                      <span className="truncate">{d.name}</span>
+                    </span>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {pct}% <span className="text-foreground/60">({d.value})</span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
+
+        {/* Revenue by source */}
+        <div className="xl:col-span-3 bg-card rounded-2xl border border-border p-5 shadow-sm">
+          <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+            <Wallet className="size-4 text-brand" />
+            Revenue by Source
+          </h3>
+          <ul className="space-y-2.5 text-sm">
+            {SOURCE_ORDER.map((src) => {
+              const meta = SOURCE_META[src];
+              const Icon = meta.icon;
+              const rev = sourceTotals[src].revenue;
+              const pct = ((rev / totalRevenue) * 100).toFixed(1);
+              return (
+                <li key={src} className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className={cn("size-7 rounded-md flex items-center justify-center shrink-0", meta.tint)}>
+                      <Icon className="size-3.5" />
+                    </span>
+                    <span className="truncate font-medium">{src}</span>
+                  </span>
+                  <span className="text-right">
+                    <span className="block font-semibold tabular-nums">₹{rev.toLocaleString()}</span>
+                    <span className="block text-[11px] text-muted-foreground tabular-nums">{pct}%</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Total Revenue</span>
+            <span className="font-bold text-brand">₹{totalRevenue.toLocaleString()}</span>
+          </div>
+        </div>
+      </div>
+
 
       {/* Table card */}
       <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
@@ -194,12 +347,19 @@ function BookingsPage() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by booking ID, passenger, phone…"
+              placeholder="Search by Booking ID, Name, Mobile, PNR…"
               className="w-full h-11 pl-10 pr-4 rounded-xl border border-border bg-background text-sm outline-none transition-all focus:border-brand focus:ring-2 focus:ring-brand/15"
             />
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Filter className="size-4 text-muted-foreground hidden sm:block" />
+            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <SelectTrigger className="h-11 w-[150px] rounded-xl bg-background"><SelectValue placeholder="Source" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sources</SelectItem>
+                {SOURCE_ORDER.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
             <Select value={routeFilter} onValueChange={setRouteFilter}>
               <SelectTrigger className="h-11 w-[170px] rounded-xl bg-background"><SelectValue placeholder="Route" /></SelectTrigger>
               <SelectContent>
@@ -207,8 +367,15 @@ function BookingsPage() {
                 {routes.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Select value={dateFilter} onValueChange={setDateFilter}>
+              <SelectTrigger className="h-11 w-[150px] rounded-xl bg-background"><SelectValue placeholder="Journey Date" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Dates</SelectItem>
+                {journeyDates.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+              </SelectContent>
+            </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-11 w-[150px] rounded-xl bg-background"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectTrigger className="h-11 w-[140px] rounded-xl bg-background"><SelectValue placeholder="Status" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="Confirmed">Confirmed</SelectItem>
@@ -232,14 +399,15 @@ function BookingsPage() {
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[1200px]">
+          <table className="w-full text-sm min-w-[1400px]">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground bg-muted/40">
                 <th className="px-5 py-3.5 font-semibold">Booking ID</th>
+                <th className="px-5 py-3.5 font-semibold">Source</th>
                 <th className="px-5 py-3.5 font-semibold">Passenger</th>
+                <th className="px-5 py-3.5 font-semibold">Mobile</th>
                 <th className="px-5 py-3.5 font-semibold">Route</th>
                 <th className="px-5 py-3.5 font-semibold">Boarding</th>
-                <th className="px-5 py-3.5 font-semibold">Bus</th>
                 <th className="px-5 py-3.5 font-semibold">Seat</th>
                 <th className="px-5 py-3.5 font-semibold">Journey</th>
                 <th className="px-5 py-3.5 font-semibold">Amount</th>
@@ -252,14 +420,18 @@ function BookingsPage() {
               {loading
                 ? Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i} className="border-t border-border">
-                      {Array.from({ length: 11 }).map((__, j) => (
+                      {Array.from({ length: 12 }).map((__, j) => (
                         <td key={j} className="px-5 py-4"><Skeleton className="h-5 w-full max-w-[120px]" /></td>
                       ))}
                     </tr>
                   ))
                 : filtered.map((r) => (
                     <tr key={r.id} className="border-t border-border transition-colors hover:bg-brand/[0.04] group">
-                      <td className="px-5 py-4 font-semibold text-foreground">{r.id}</td>
+                      <td className="px-5 py-4">
+                        <div className="font-semibold text-foreground">{r.id}</div>
+                        <div className="text-[11px] text-muted-foreground font-mono">PNR {r.pnr.slice(-10)}</div>
+                      </td>
+                      <td className="px-5 py-4"><SourceBadge source={r.source} /></td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <div className={cn("size-9 rounded-full flex items-center justify-center font-semibold text-xs shrink-0", r.avatarTone)}>
@@ -267,32 +439,25 @@ function BookingsPage() {
                           </div>
                           <div className="min-w-0">
                             <div className="font-medium text-foreground">{r.passenger}</div>
-                            <div className="text-xs text-muted-foreground">{r.phone}</div>
+                            <div className="text-[11px] text-muted-foreground">{r.gender} • {r.age}y</div>
                           </div>
                         </div>
                       </td>
+                      <td className="px-5 py-4 text-sm tabular-nums text-muted-foreground whitespace-nowrap">{r.phone}</td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-1.5 font-medium">
                           <span>{r.from}</span>
                           <ArrowRight className="size-3.5 text-brand" />
                           <span>{r.to}</span>
                         </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">{r.boarding} → {r.dropping}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{r.bus} • {r.busName}</div>
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-1.5 text-sm">
                           <MapPin className="size-3.5 text-brand" />
                           {r.boarding}
                         </div>
-                      </td>
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-2">
-                          <BusFront className="size-4 text-navy" />
-                          <div>
-                            <div className="font-medium text-foreground">{r.bus}</div>
-                            <div className="text-xs text-muted-foreground">{r.busName}</div>
-                          </div>
-                        </div>
+                        <div className="text-[11px] text-muted-foreground mt-0.5">→ {r.dropping}</div>
                       </td>
                       <td className="px-5 py-4">
                         <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-100">
@@ -326,7 +491,7 @@ function BookingsPage() {
                   ))}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-6 py-16 text-center text-muted-foreground">
+                  <td colSpan={12} className="px-6 py-16 text-center text-muted-foreground">
                     <Ticket className="size-10 mx-auto mb-2 opacity-40" />
                     No bookings match your filters.
                   </td>
@@ -373,7 +538,10 @@ function BookingsPage() {
           {selected && (
             <div className="flex-1 overflow-y-auto p-5 space-y-5">
               <div className="text-center">
-                <StatusBadge status={selected.status} />
+                <div className="flex items-center justify-center gap-2">
+                  <StatusBadge status={selected.status} />
+                  <SourceBadge source={selected.source} />
+                </div>
                 <div className="mt-2 text-lg font-bold tracking-tight">{selected.id}</div>
                 <div className="text-xs text-muted-foreground">PNR: {selected.pnr}</div>
               </div>
@@ -528,6 +696,7 @@ function NewBookingSheet({ open, onOpenChange, existingRoutes, onCreate }: NewBo
   const [amount, setAmount] = useState("");
   const [payment, setPayment] = useState<PaymentStatus>("Paid");
   const [status, setStatus] = useState<BookingStatus>("Confirmed");
+  const [source, setSource] = useState<BookingSource>("Counter");
 
   const reset = () => {
     setPassenger(""); setPhone(""); setAge(""); setBoarding(""); setDropping("");
@@ -545,6 +714,7 @@ function NewBookingSheet({ open, onOpenChange, existingRoutes, onCreate }: NewBo
     const newBooking: Booking = {
       id,
       pnr: `KENR-${id.replace("KR-", "")}-${Date.now().toString().slice(-6)}`,
+      source,
       passenger, phone, gender,
       age: Number(age) || 25,
       idProof, from, to,
@@ -655,8 +825,16 @@ function NewBookingSheet({ open, onOpenChange, existingRoutes, onCreate }: NewBo
           </section>
 
           <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Payment</h3>
-            <div className="grid grid-cols-3 gap-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Payment & Source</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Booking Source">
+                <Select value={source} onValueChange={(v) => setSource(v as BookingSource)}>
+                  <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {SOURCE_ORDER.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </Field>
               <Field label="Amount (₹) *"><Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="1250" className="h-10 rounded-lg" /></Field>
               <Field label="Payment">
                 <Select value={payment} onValueChange={(v) => setPayment(v as PaymentStatus)}>
