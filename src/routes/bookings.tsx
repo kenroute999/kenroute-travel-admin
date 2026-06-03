@@ -823,8 +823,16 @@ function NewBookingSheet({ open, onOpenChange, existingRoutes, onCreate }: NewBo
           </section>
 
           <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Payment</h3>
-            <div className="grid grid-cols-3 gap-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Payment & Source</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Booking Source">
+                <Select value={source} onValueChange={(v) => setSource(v as BookingSource)}>
+                  <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {SOURCE_ORDER.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </Field>
               <Field label="Amount (₹) *"><Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="1250" className="h-10 rounded-lg" /></Field>
               <Field label="Payment">
                 <Select value={payment} onValueChange={(v) => setPayment(v as PaymentStatus)}>
