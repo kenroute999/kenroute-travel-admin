@@ -492,7 +492,7 @@ function BookingsPage() {
                   ))}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-6 py-16 text-center text-muted-foreground">
+                  <td colSpan={12} className="px-6 py-16 text-center text-muted-foreground">
                     <Ticket className="size-10 mx-auto mb-2 opacity-40" />
                     No bookings match your filters.
                   </td>
