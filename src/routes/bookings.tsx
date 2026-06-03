@@ -348,12 +348,19 @@ function BookingsPage() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by booking ID, passenger, phone…"
+              placeholder="Search by Booking ID, Name, Mobile, PNR…"
               className="w-full h-11 pl-10 pr-4 rounded-xl border border-border bg-background text-sm outline-none transition-all focus:border-brand focus:ring-2 focus:ring-brand/15"
             />
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Filter className="size-4 text-muted-foreground hidden sm:block" />
+            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <SelectTrigger className="h-11 w-[150px] rounded-xl bg-background"><SelectValue placeholder="Source" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sources</SelectItem>
+                {SOURCE_ORDER.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
             <Select value={routeFilter} onValueChange={setRouteFilter}>
               <SelectTrigger className="h-11 w-[170px] rounded-xl bg-background"><SelectValue placeholder="Route" /></SelectTrigger>
               <SelectContent>
@@ -361,8 +368,15 @@ function BookingsPage() {
                 {routes.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Select value={dateFilter} onValueChange={setDateFilter}>
+              <SelectTrigger className="h-11 w-[150px] rounded-xl bg-background"><SelectValue placeholder="Journey Date" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Dates</SelectItem>
+                {journeyDates.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+              </SelectContent>
+            </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-11 w-[150px] rounded-xl bg-background"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectTrigger className="h-11 w-[140px] rounded-xl bg-background"><SelectValue placeholder="Status" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="Confirmed">Confirmed</SelectItem>
