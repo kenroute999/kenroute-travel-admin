@@ -714,6 +714,7 @@ function ConfigureDialog({
   }, [id, existing, open]);
 
   if (!integration || !id) return null;
+  const safeId: IntegrationId = id;
 
   const set = (k: string, v: string | boolean | number) =>
     setForm((prev) => ({ ...prev, [k]: v }));
