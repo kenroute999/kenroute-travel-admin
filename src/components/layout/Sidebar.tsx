@@ -8,6 +8,7 @@ import {
   BarChart3,
   Armchair,
   UserCog,
+  Plug,
   Settings,
   LogOut,
 } from "lucide-react";
