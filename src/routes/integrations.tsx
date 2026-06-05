@@ -724,7 +724,7 @@ function ConfigureDialog({
   }
 
   function handleSubmit() {
-    const schema = id === "redbus" ? redbusSchema : abhibusSchema;
+    const schema = safeId === "redbus" ? redbusSchema : abhibusSchema;
     const parsed = schema.safeParse(form);
     if (!parsed.success) {
       const out: FormErrors = {};
@@ -737,10 +737,9 @@ function ConfigureDialog({
       return;
     }
     setSaving(true);
-    const targetId = id;
     setTimeout(() => {
       setSaving(false);
-      onSave(targetId, parsed.data as AnyConfig);
+      onSave(safeId, parsed.data as AnyConfig);
     }, 350);
   }
 
