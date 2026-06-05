@@ -8,6 +8,7 @@ import {
   BarChart3,
   Armchair,
   UserCog,
+  Plug,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -23,6 +24,7 @@ const items = [
   { title: "Reports", url: "/reports", icon: BarChart3 },
   { title: "Seat Layouts", url: "/seat-layouts", icon: Armchair },
   { title: "Drivers", url: "/drivers", icon: UserCog },
+  { title: "OTA Integrations", url: "/integrations", icon: Plug },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
