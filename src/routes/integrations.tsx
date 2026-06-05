@@ -736,10 +736,10 @@ function ConfigureDialog({
       return;
     }
     setSaving(true);
-    // simulate brief persistence latency
+    const targetId = id;
     setTimeout(() => {
       setSaving(false);
-      onSave(id, parsed.data as AnyConfig);
+      onSave(targetId, parsed.data as AnyConfig);
     }, 350);
   }
 
