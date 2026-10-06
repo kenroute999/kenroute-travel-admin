@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Bus,
@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import logo from "@/assets/kenroute-logo.png";
 import { cn } from "@/lib/utils";
+import { sessionStore } from "@/lib/session";
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -30,6 +31,12 @@ const items = [
 
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
+
+  async function handleLogout() {
+    sessionStore.logout();
+    await navigate({ to: "/login", replace: true });
+  }
 
   return (
     <aside className="hidden md:flex flex-col w-64 shrink-0 bg-navy text-navy-foreground border-r border-sidebar-border">
@@ -70,7 +77,11 @@ export function AppSidebar() {
       </nav>
 
       <div className="p-3 border-t border-sidebar-border">
-        <button className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/70 hover:bg-white/5 hover:text-white transition-colors">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+        >
           <LogOut className="size-[18px]" />
           Logout
         </button>
