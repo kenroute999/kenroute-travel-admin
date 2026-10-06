@@ -460,7 +460,11 @@ function BusesPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="Bus Type" required>
-                <Select name="type" defaultValue={editing?.type ?? "Sleeper (2+1)"} onValueChange={(v) => setBusType(v as BusType)}>
+                <Select
+                  name="type"
+                  defaultValue={editing?.type ?? "Sleeper (2+1)"}
+                  onValueChange={(v) => setBusType(v as BusType)}
+                >
                   <SelectTrigger className="h-11 rounded-xl">
                     <SelectValue />
                   </SelectTrigger>
