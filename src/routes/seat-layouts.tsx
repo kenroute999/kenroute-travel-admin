@@ -167,28 +167,32 @@ const STATUS_META: Record<
     dot: "bg-success",
     chip: "bg-success/15 text-success border-success/25",
     seat: "bg-gradient-to-b from-success/20 to-success/10 border-success/40 text-success hover:from-success/30 hover:to-success/15",
-    selected: "ring-2 ring-chart-5 ring-offset-2 ring-offset-background",
+    selected:
+      "ring-[3px] ring-chart-5 ring-offset-2 ring-offset-background shadow-lg shadow-chart-5/20 brightness-110",
   },
   booked: {
     label: "Booked (Male)",
     dot: "bg-blue-500",
     chip: "bg-blue-100 text-blue-700 border-blue-200",
     seat: "bg-gradient-to-b from-blue-500/20 to-blue-400/10 border-blue-500/40 text-blue-600 hover:from-blue-500/30 hover:to-blue-400/15",
-    selected: "ring-2 ring-chart-5 ring-offset-2 ring-offset-background",
+    selected:
+      "ring-[3px] ring-chart-5 ring-offset-2 ring-offset-background shadow-lg shadow-chart-5/20 brightness-110",
   },
   female: {
     label: "Booked (Female)",
     dot: "bg-pink-500",
     chip: "bg-pink-100 text-pink-600 border-pink-200",
     seat: "bg-gradient-to-b from-pink-200/70 to-pink-100/60 border-pink-300 text-pink-600 hover:from-pink-300/70 hover:to-pink-200/60",
-    selected: "ring-2 ring-chart-5 ring-offset-2 ring-offset-background",
+    selected:
+      "ring-[3px] ring-chart-5 ring-offset-2 ring-offset-background shadow-lg shadow-chart-5/20 brightness-110",
   },
   blocked: {
     label: "Blocked",
-    dot: "bg-muted-foreground",
-    chip: "bg-muted text-muted-foreground border-border",
-    seat: "bg-gradient-to-b from-muted to-muted/60 border-border text-muted-foreground hover:from-muted",
-    selected: "ring-2 ring-chart-5 ring-offset-2 ring-offset-background",
+    dot: "bg-gray-400",
+    chip: "bg-gray-100 text-gray-600 border-gray-200",
+    seat: "bg-gradient-to-b from-gray-400/15 to-gray-400/5 border-dashed border-gray-300/70 text-gray-500 hover:from-gray-400/20 hover:to-gray-400/10",
+    selected:
+      "ring-[3px] ring-chart-5 ring-offset-2 ring-offset-background shadow-lg shadow-chart-5/20 brightness-110",
   },
 };
 
@@ -979,7 +983,7 @@ function BedCell({
 }
 
 // One wide rectangle representing a double bed, split into two clickable berths -
-// same height as every other bed in the application
+// each berth carries the same border styling as a single bed
 function DoubleBedCell({
   seats,
   selectedId,
@@ -992,8 +996,8 @@ function DoubleBedCell({
   onSelect: (id: string) => void;
 }) {
   return (
-    <div className="flex rounded-lg overflow-hidden border-2" style={{ height: BED_H }}>
-      {seats.map((seat, i) => {
+    <div className="flex" style={{ height: BED_H, gap: GRID_GAP }}>
+      {seats.map((seat) => {
         const meta = STATUS_META[seat.status];
         return (
           <button
@@ -1002,7 +1006,7 @@ function DoubleBedCell({
             title={seatHint(seat)}
             className={cn(
               "group relative flex-1 flex flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-all duration-150",
-              i > 0 && "border-l-2 border-border/60",
+              "rounded-lg border-2",
               "hover:-translate-y-0.5 hover:shadow-md",
               seatStyle(seat),
               seat.id === selectedId && meta.selected,
