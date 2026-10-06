@@ -1,4 +1,5 @@
-const BASE_URL: string = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:5000/api/v1";
+import { apiBaseUrl, refreshTokens, type AuthTokens } from "@/lib/auth";
+import { getSession, sessionStore } from "@/lib/session";
 
 export class ApiError extends Error {
   constructor(
@@ -18,19 +19,70 @@ export function errorMessage(err: unknown): string {
   return field ? `${err.message}: ${field} — ${problem}` : err.message;
 }
 
+// Several requests can hit an expired token at once; they must share one refresh,
+// because the server rotates the refresh token and rejects a second use.
+let refreshing: Promise<AuthTokens | null> | null = null;
+
+function renewTokens(): Promise<AuthTokens | null> {
+  refreshing ??= (async () => {
+    const session = getSession();
+    if (!session) return null;
+    try {
+      const tokens = await refreshTokens(session.tokens.refreshToken);
+      sessionStore.setSession({ ...session, tokens });
+      return tokens;
+    } catch {
+      return null;
+    }
+  })().finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
+}
+
+/** Ends the session on the server too, so the stored refresh token stops working. */
+export async function signOut() {
+  const refreshToken = getSession()?.tokens.refreshToken;
+  sessionStore.logout();
+  if (!refreshToken) return;
+  // Best effort: the user is signed out locally even if the server cannot be reached.
+  await send("/auth/logout", { method: "POST", body: { refreshToken } }).catch(() => undefined);
+}
+
+function send(path: string, options: { method?: string; body?: unknown }, accessToken?: string) {
+  return fetch(apiBaseUrl() + path, {
+    method: options.method ?? "GET",
+    headers: {
+      ...(options.body !== undefined && { "Content-Type": "application/json" }),
+      ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
+    },
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  });
+}
+
 export async function api<T>(
   path: string,
   options: { method?: string; body?: unknown } = {},
 ): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(BASE_URL + path, {
-      method: options.method ?? "GET",
-      credentials: "include",
-      headers: options.body === undefined ? undefined : { "Content-Type": "application/json" },
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    });
-  } catch {
+    res = await send(path, options, getSession()?.tokens.accessToken);
+    if (res.status === 401) {
+      // The access token lasts 15 minutes: swap it once and retry.
+      const tokens = await renewTokens();
+      if (!tokens) {
+        // Clearing the session makes the route guard send the user to sign-in.
+        sessionStore.logout();
+        throw new ApiError(
+          401,
+          "UNAUTHENTICATED",
+          "Your session has expired. Please sign in again.",
+        );
+      }
+      res = await send(path, options, tokens.accessToken);
+    }
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
     throw new ApiError(0, "NETWORK", "Cannot reach the server. Is the backend running?");
   }
   if (res.status === 204) return undefined as T;

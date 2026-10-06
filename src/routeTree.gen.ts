@@ -13,6 +13,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SeatLayoutsRouteImport } from './routes/seat-layouts'
 import { Route as RoutesRouteImport } from './routes/routes'
 import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as IntegrationsRouteImport } from './routes/integrations'
 import { Route as DriversRouteImport } from './routes/drivers'
 import { Route as ConductorsRouteImport } from './routes/conductors'
@@ -39,6 +40,11 @@ const RoutesRoute = RoutesRouteImport.update({
 const ReportsRoute = ReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IntegrationsRoute = IntegrationsRouteImport.update({
@@ -85,6 +91,7 @@ export interface FileRoutesByFullPath {
   '/conductors': typeof ConductorsRoute
   '/drivers': typeof DriversRoute
   '/integrations': typeof IntegrationsRoute
+  '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
   '/routes': typeof RoutesRoute
   '/seat-layouts': typeof SeatLayoutsRoute
@@ -98,6 +105,7 @@ export interface FileRoutesByTo {
   '/conductors': typeof ConductorsRoute
   '/drivers': typeof DriversRoute
   '/integrations': typeof IntegrationsRoute
+  '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
   '/routes': typeof RoutesRoute
   '/seat-layouts': typeof SeatLayoutsRoute
@@ -112,6 +120,7 @@ export interface FileRoutesById {
   '/conductors': typeof ConductorsRoute
   '/drivers': typeof DriversRoute
   '/integrations': typeof IntegrationsRoute
+  '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
   '/routes': typeof RoutesRoute
   '/seat-layouts': typeof SeatLayoutsRoute
@@ -127,6 +136,7 @@ export interface FileRouteTypes {
     | '/conductors'
     | '/drivers'
     | '/integrations'
+    | '/login'
     | '/reports'
     | '/routes'
     | '/seat-layouts'
@@ -140,6 +150,7 @@ export interface FileRouteTypes {
     | '/conductors'
     | '/drivers'
     | '/integrations'
+    | '/login'
     | '/reports'
     | '/routes'
     | '/seat-layouts'
@@ -153,6 +164,7 @@ export interface FileRouteTypes {
     | '/conductors'
     | '/drivers'
     | '/integrations'
+    | '/login'
     | '/reports'
     | '/routes'
     | '/seat-layouts'
@@ -167,6 +179,7 @@ export interface RootRouteChildren {
   ConductorsRoute: typeof ConductorsRoute
   DriversRoute: typeof DriversRoute
   IntegrationsRoute: typeof IntegrationsRoute
+  LoginRoute: typeof LoginRoute
   ReportsRoute: typeof ReportsRoute
   RoutesRoute: typeof RoutesRoute
   SeatLayoutsRoute: typeof SeatLayoutsRoute
@@ -201,6 +214,13 @@ declare module '@tanstack/react-router' {
       path: '/reports'
       fullPath: '/reports'
       preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/integrations': {
@@ -263,6 +283,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConductorsRoute: ConductorsRoute,
   DriversRoute: DriversRoute,
   IntegrationsRoute: IntegrationsRoute,
+  LoginRoute: LoginRoute,
   ReportsRoute: ReportsRoute,
   RoutesRoute: RoutesRoute,
   SeatLayoutsRoute: SeatLayoutsRoute,
