@@ -12,7 +12,6 @@ import {
   Plus,
   RotateCcw,
   Save,
-  Settings2,
   Sparkles,
   Trash2,
   User,
@@ -41,6 +40,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { busFleet, type BusType } from "@/lib/buses";
 
 export const Route = createFileRoute("/seat-layouts")({
   head: () => ({
@@ -65,7 +65,7 @@ interface Seat {
   id: string;
   label: string;
   row: number;
-  col: number;
+  col: number; // 0 = single (left), 1 = aisle (only used by the back bench), 2 & 3 = double (right)
   deck: DeckKey;
   kind: SeatKind;
   status: SeatStatus;
@@ -78,22 +78,123 @@ interface Seat {
   gender?: "Male" | "Female" | "Any";
 }
 
-// ---------- Mock data ----------
-const BUSES = [
-  { id: "TS09AB1234", name: "TS 09 AB 1234", model: "Volvo B11R · Sleeper (2+1)" },
-  { id: "TS09CD5678", name: "TS 09 CD 5678", model: "Scania Metrolink · Seater (2+2)" },
-  { id: "AP12EF9012", name: "AP 12 EF 9012", model: "Mercedes Multi-Axle · Sleeper (2+1)" },
-];
+// ---------- Bus catalog (shared with the Buses page) ----------
+type LayoutId = "sleeper-2-1" | "seater-2-2" | "seater-sleeper-2-1";
+type SeatArrangement = "2-1" | "2-2";
 
-const COLS_LOWER = 6; // 6 berth columns + aisle
-const ROWS_LOWER = 2;
-const COLS_BACK = 6;
-const ROWS_BACK = 2;
+interface DeckSideSpec {
+  rows: number; // rows filled on this side
+  kind: SeatKind; // sleeper bed or seater seat
+}
 
-function seedSeats(busId: string): Seat[] {
+interface DeckSpec {
+  single: DeckSideSpec | null; // left side (single bed / left pair)
+  pair: DeckSideSpec | null; // right side (double beds / right pair)
+  backBench: boolean;
+  price: number;
+}
+
+interface LayoutSpec {
+  id: LayoutId;
+  label: BusType;
+  arrangement: SeatArrangement;
+  lower: DeckSpec;
+  upper: DeckSpec | null;
+}
+
+const LAYOUT_BY_TYPE: Record<BusType, LayoutId> = {
+  "Sleeper (2+1)": "sleeper-2-1",
+  "Seater (2+2)": "seater-2-2",
+  "Seater/Sleeper (2+1)": "seater-sleeper-2-1",
+};
+
+const LAYOUTS: Record<LayoutId, LayoutSpec> = {
+  // Sleeper: 6 single beds + 6x2 double beds per deck, bed icons
+  "sleeper-2-1": {
+    id: "sleeper-2-1",
+    label: "Sleeper (2+1)",
+    arrangement: "2-1",
+    lower: {
+      single: { rows: 6, kind: "sleeper" },
+      pair: { rows: 6, kind: "sleeper" },
+      backBench: false,
+      price: 1250,
+    },
+    upper: {
+      single: { rows: 6, kind: "sleeper" },
+      pair: { rows: 6, kind: "sleeper" },
+      backBench: false,
+      price: 1400,
+    },
+  },
+  // Seater: 10 rows of 4 + a 5-seat back bench = 45 seats (lower deck only)
+  "seater-2-2": {
+    id: "seater-2-2",
+    label: "Seater (2+2)",
+    arrangement: "2-2",
+    lower: {
+      single: { rows: 10, kind: "seater" },
+      pair: { rows: 10, kind: "seater" },
+      backBench: true,
+      price: 650,
+    },
+    upper: null,
+  },
+  // Seater/Sleeper: upper deck full sleeper, lower deck beds (single side) + 12x2 seater
+  "seater-sleeper-2-1": {
+    id: "seater-sleeper-2-1",
+    label: "Seater/Sleeper (2+1)",
+    arrangement: "2-1",
+    lower: {
+      single: { rows: 6, kind: "sleeper" },
+      pair: { rows: 12, kind: "seater" },
+      backBench: false,
+      price: 800,
+    },
+    upper: {
+      single: { rows: 6, kind: "sleeper" },
+      pair: { rows: 6, kind: "sleeper" },
+      backBench: false,
+      price: 1300,
+    },
+  },
+};
+
+// Buses come straight from the shared fleet used on the Buses page.
+const BUSES = busFleet.map((b) => ({
+  id: b.no.replace(/\s+/g, ""),
+  name: b.no,
+  model: `${b.name} · ${b.type}`,
+  layout: LAYOUT_BY_TYPE[b.type],
+}));
+
+// Indian layout (right-hand traffic, driver on the right, door on the left):
+//  2+1: [ single ] [ aisle ] [ double ] [ double ]
+//  2+2: [ double] [ double ] [ aisle ] [ double ] [ double ]
+const SINGLE_COL = 0;
+const AISLE_COL = 1;
+const AISLE_COL_22 = 2;
+const DOUBLE_COLS = [2, 3];
+const PAIR_COLS_22 = [0, 1, 3, 4];
+
+// Uniform sizing so every bus type has the SAME outer width (224px inner body)
+// and every bed is the SAME size (58x78 single, 130x78 double) on every bus/deck:
+//  2+1: [ single 58 ] [ aisle 24 ] [ double 130 ]
+//  2+2: [ seat 44 ] [ seat 44 ] [ aisle 24 ] [ seat 44 ] [ seat 44 ]
+const SEAT_W = 44; // px - single seater seat
+const SINGLE_W = 58; // px - single bed column (uniform bed width, slightly reduced)
+const DOUBLE_W = 130; // px - double bed column (spans 2 seat widths)
+const AISLE_W = 24; // px
+const BED_H = 78; // px - uniform bed height for every bed in every bus/deck
+const GRID_GAP = 6; // px
+const GRID_COLS_22 = `${SEAT_W}px ${SEAT_W}px ${AISLE_W}px ${SEAT_W}px ${SEAT_W}px`;
+const GRID_WIDTH_21 = SINGLE_W + AISLE_W + DOUBLE_W + GRID_GAP * 2;
+const GRID_WIDTH_22 = SEAT_W * 4 + AISLE_W + GRID_GAP * 4;
+
+function seedSeats(busId: string, layoutId: LayoutId): Seat[] {
+  const spec = LAYOUTS[layoutId];
   // Deterministic-ish seed based on busId
   const hash = busId.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  const statuses: SeatStatus[] = ["available", "booked", "female", "blocked"];
   const pick = (i: number): SeatStatus => {
     const r = (hash + i * 7) % 11;
     if (r < 6) return "available";
@@ -105,81 +206,58 @@ function seedSeats(busId: string): Seat[] {
   const passengers = ["Priya Sharma", "Rahul Verma", "Anita Rao", "Vikram Singh", "Neha Patel", "Arjun Mehta"];
   const seats: Seat[] = [];
   let n = 1;
+  const bookingBase = 10400;
+  const singleCols = spec.arrangement === "2-1" ? [SINGLE_COL] : [0, 1];
+  const pairCols = spec.arrangement === "2-1" ? [...DOUBLE_COLS] : [3, 4];
 
-  // Lower deck front
-  for (let r = 0; r < ROWS_LOWER; r++) {
-    for (let c = 0; c < COLS_LOWER; c++) {
-      const id = `L${n}`;
-      const status = pick(n);
+  const buildDeck = (deck: DeckKey, ds: DeckSpec, pickOffset: number) => {
+    const prefix = deck === "lower" ? "L" : "U";
+    const maxRows =
+      Math.max(ds.single?.rows ?? 0, ds.pair?.rows ?? 0) + (ds.backBench ? 1 : 0);
+
+    const addSeat = (r: number, c: number, kind: SeatKind) => {
+      const status = pick(n + pickOffset);
+      const reserved = status === "booked" || status === "female";
       seats.push({
-        id,
-        label: id,
+        id: `${prefix}${n}`,
+        label: String(n),
         row: r,
         col: c,
-        deck: "lower",
-        kind: "sleeper",
+        deck,
+        kind,
         status,
-        price: 1250,
+        price: ds.price,
         gender: status === "female" ? "Female" : "Any",
-        passenger: status === "booked" || status === "female" ? passengers[n % passengers.length] : undefined,
-        bookingId: status === "booked" || status === "female" ? `KR-${10400 + n}` : undefined,
-        bookingDate: status === "booked" || status === "female" ? "20 May 2025, 06:00 AM" : undefined,
+        passenger: reserved ? passengers[n % passengers.length] : undefined,
+        bookingId: reserved ? `KR-${bookingBase + n}` : undefined,
+        bookingDate: reserved ? "20 May 2025, 06:00 AM" : undefined,
         boarding: "Ameerpet",
         dropping: "Bangalore (Silk Board)",
       });
       n++;
-    }
-  }
-  // Lower deck back
-  for (let r = 0; r < ROWS_BACK; r++) {
-    for (let c = 0; c < COLS_BACK; c++) {
-      const id = `L${n}`;
-      const status = pick(n + 3);
-      seats.push({
-        id,
-        label: id,
-        row: r + ROWS_LOWER + 1, // gap row for aisle/door
-        col: c,
-        deck: "lower",
-        kind: "sleeper",
-        status,
-        price: 1100,
-        gender: status === "female" ? "Female" : "Any",
-        passenger: status === "booked" || status === "female" ? passengers[(n + 1) % passengers.length] : undefined,
-        bookingId: status === "booked" || status === "female" ? `KR-${10400 + n}` : undefined,
-        bookingDate: status === "booked" || status === "female" ? "20 May 2025, 06:00 AM" : undefined,
-        boarding: "Ameerpet",
-        dropping: "Bangalore (Silk Board)",
-      });
-      n++;
-    }
-  }
+    };
 
-  // Upper deck
-  let u = 1;
-  for (let r = 0; r < 3; r++) {
-    for (let c = 0; c < 6; c++) {
-      const id = `U${u}`;
-      const status = pick(u + 17);
-      seats.push({
-        id,
-        label: id,
-        row: r,
-        col: c,
-        deck: "upper",
-        kind: "sleeper",
-        status,
-        price: 1400,
-        gender: status === "female" ? "Female" : "Any",
-        passenger: status === "booked" || status === "female" ? passengers[u % passengers.length] : undefined,
-        bookingId: status === "booked" || status === "female" ? `KR-${10500 + u}` : undefined,
-        bookingDate: status === "booked" || status === "female" ? "20 May 2025, 06:00 AM" : undefined,
-        boarding: "Ameerpet",
-        dropping: "Bangalore (Silk Board)",
-      });
-      u++;
+    if (ds.single) {
+      for (let r = 0; r < ds.single.rows; r++) {
+        for (const c of singleCols) addSeat(r, c, ds.single.kind);
+      }
     }
-  }
+    if (ds.pair) {
+      for (let r = 0; r < ds.pair.rows; r++) {
+        for (const c of pairCols) addSeat(r, c, ds.pair.kind);
+      }
+    }
+
+    // Back bench: seats spanning the full width (the aisle position gets a seat too)
+    if (ds.backBench) {
+      const benchCols = spec.arrangement === "2-1" ? [DOUBLE_COLS[0], DOUBLE_COLS[1], AISLE_COL, SINGLE_COL] : [0, 1, 2, 3, 4];
+      for (const c of benchCols) addSeat(maxRows - 1, c, ds.pair?.kind ?? "seater");
+    }
+  };
+
+  buildDeck("lower", spec.lower, 0);
+  if (spec.upper) buildDeck("upper", spec.upper, 17);
+
   return seats;
 }
 
@@ -222,19 +300,41 @@ const STATUS_META: Record<SeatStatus, { label: string; dot: string; chip: string
 // ---------- Page ----------
 function SeatLayoutsPage() {
   const [busId, setBusId] = useState(BUSES[0].id);
-  const [layoutType, setLayoutType] = useState("sleeper-2-1");
+  const [layoutType, setLayoutType] = useState<LayoutId>(BUSES[0].layout);
   const [deck, setDeck] = useState<DeckKey>("lower");
   const [statusFilter, setStatusFilter] = useState<"all" | SeatStatus>("all");
   const [zoom, setZoom] = useState(1);
-  const [seats, setSeats] = useState<Seat[]>(() => seedSeats(BUSES[0].id));
+  const [seats, setSeats] = useState<Seat[]>(() => seedSeats(BUSES[0].id, BUSES[0].layout));
   const [selected, setSelected] = useState<string | null>(null);
 
   const currentBus = BUSES.find((b) => b.id === busId)!;
+  const currentLayout = LAYOUTS[layoutType];
+  const hasUpperDeck = currentLayout.upper != null;
+  const availableDecks: DeckKey[] = hasUpperDeck ? ["lower", "upper"] : ["lower"];
+
+  // Applies a layout to a bus: regenerates seats and makes sure the deck is valid
+  const applyLayout = (id: string, layout: LayoutId) => {
+    setLayoutType(layout);
+    setSeats(seedSeats(id, layout));
+    setSelected(null);
+    setDeck("lower");
+  };
 
   const onChangeBus = (id: string) => {
+    const bus = BUSES.find((b) => b.id === id)!;
     setBusId(id);
-    setSeats(seedSeats(id));
-    setSelected(null);
+    applyLayout(id, bus.layout);
+  };
+
+  const onChangeLayout = (layout: LayoutId) => {
+    if (layout === layoutType) return;
+    applyLayout(busId, layout);
+    const spec = LAYOUTS[layout];
+    toast.info(
+      spec.upper
+        ? `${spec.label} layout loaded: lower and upper deck`
+        : `${spec.label} layout loaded: lower deck only`,
+    );
   };
 
   const stats = useMemo(() => {
@@ -257,9 +357,8 @@ function SeatLayoutsPage() {
     };
   }, [seats]);
 
-  const deckSeats = seats.filter(
-    (s) => s.deck === deck && (statusFilter === "all" || s.status === statusFilter),
-  );
+  // All seats of the current deck (filter only dims, so the layout keeps its shape)
+  const deckSeats = seats.filter((s) => s.deck === deck);
 
   const selectedSeat = seats.find((s) => s.id === selected) ?? null;
 
@@ -325,13 +424,19 @@ function SeatLayoutsPage() {
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Layout Type</label>
-              <Select value={layoutType} onValueChange={setLayoutType}>
+              <Select value={layoutType} onValueChange={(v) => onChangeLayout(v as LayoutId)}>
                 <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="sleeper-2-1">Sleeper (2+1)</SelectItem>
-                  <SelectItem value="sleeper-2-2">Sleeper (2+2)</SelectItem>
-                  <SelectItem value="seater-2-2">Seater (2+2)</SelectItem>
-                  <SelectItem value="seater-2-3">Seater (2+3)</SelectItem>
+                  {(Object.keys(LAYOUTS) as LayoutId[]).map((id) => (
+                    <SelectItem key={id} value={id}>
+                      <div className="flex flex-col text-left">
+                        <span className="font-medium">{LAYOUTS[id].label}</span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {LAYOUTS[id].upper ? "Lower + Upper deck" : "Lower deck only"}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -341,7 +446,9 @@ function SeatLayoutsPage() {
                 <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="lower">Lower Deck</SelectItem>
-                  <SelectItem value="upper">Upper Deck</SelectItem>
+                  <SelectItem value="upper" disabled={!hasUpperDeck}>
+                    Upper Deck{!hasUpperDeck ? " (not available)" : ""}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -364,8 +471,7 @@ function SeatLayoutsPage() {
                 className="h-11 w-full gap-2"
                 onClick={() => {
                   setStatusFilter("all");
-                  setDeck("lower");
-                  setLayoutType("sleeper-2-1");
+                  applyLayout(busId, currentBus.layout);
                 }}
               >
                 <RotateCcw className="size-4" /> Reset
@@ -378,7 +484,7 @@ function SeatLayoutsPage() {
             {/* Deck tabs + legend */}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <div className="inline-flex rounded-lg bg-muted p-1">
-                {(["lower", "upper"] as DeckKey[]).map((d) => (
+                {availableDecks.map((d) => (
                   <button
                     key={d}
                     onClick={() => setDeck(d)}
@@ -396,40 +502,44 @@ function SeatLayoutsPage() {
               <Legend />
             </div>
 
-            {/* Bus shell */}
+            {/* Bus shell (vertical, front of the bus at the top) */}
             <div className="relative overflow-auto rounded-2xl border-2 border-border bg-gradient-to-b from-muted/40 to-background p-4">
               <div
                 className="relative mx-auto transition-transform origin-top"
                 style={{ transform: `scale(${zoom})`, width: "fit-content" }}
               >
-                <div className="relative rounded-[3rem] border-2 border-navy/15 bg-card shadow-inner px-6 py-6">
-                  {/* Bus body decorations: windows */}
-                  <div className="absolute inset-x-12 top-1 h-1.5 rounded-full bg-navy/10" />
-                  <div className="absolute inset-x-12 bottom-1 h-1.5 rounded-full bg-navy/10" />
+                <div className="relative rounded-t-[2.5rem] rounded-b-2xl border-2 border-navy/15 bg-card shadow-inner px-6 pt-5 pb-4">
+                  {/* Body decorations: side windows */}
+                  <div className="absolute inset-y-12 left-1 w-1 rounded-full bg-navy/10" />
+                  <div className="absolute inset-y-12 right-1 w-1 rounded-full bg-navy/10" />
 
-                  <div className="flex gap-4">
-                    {/* Driver + entry column */}
-                    <div className="flex flex-col justify-between py-2 w-16 shrink-0">
-                      <div className="rounded-xl bg-navy text-navy-foreground p-2 flex flex-col items-center gap-1 text-[10px]">
-                        <div className="size-8 rounded-full border-2 border-brand/60 grid place-items-center">
-                          <Settings2 className="size-4 text-brand" />
-                        </div>
-                        Driver
-                      </div>
-                      <div className="rounded-xl bg-brand/10 border border-brand/30 p-2 flex flex-col items-center gap-1 text-[10px] text-brand">
-                        <DoorOpen className="size-5" />
+                  <div className="mx-auto" style={{ width: currentLayout.arrangement === "2-1" ? GRID_WIDTH_21 : GRID_WIDTH_22 }}>
+                    {/* Front: Entry (left) and Driver (right) */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="rounded-lg bg-brand/10 border border-brand/30 px-2 py-1 flex flex-col items-center gap-0.5 text-[9px] text-brand">
+                        <DoorOpen className="size-4" />
                         Entry
+                      </div>
+                      <div
+                        className="size-10 rounded-lg border-2 border-navy/30 bg-card grid place-items-center text-navy"
+                        title="Driver"
+                      >
+                        <SteeringWheel className="size-6" />
                       </div>
                     </div>
 
                     {/* Seats grid */}
-                    <div className="flex-1">
-                      <SeatGrid
-                        seats={deckSeats}
-                        deck={deck}
-                        selectedId={selected}
-                        onSelect={setSelected}
-                      />
+                    <SeatGrid
+                      seats={deckSeats}
+                      deck={deck}
+                      arrangement={currentLayout.arrangement}
+                      statusFilter={statusFilter}
+                      selectedId={selected}
+                      onSelect={setSelected}
+                    />
+
+                    <div className="mt-3 text-center text-[9px] uppercase tracking-wider text-muted-foreground">
+                      Back of bus
                     </div>
                   </div>
                 </div>
@@ -437,7 +547,7 @@ function SeatLayoutsPage() {
             </div>
 
             {/* Zoom controls */}
-            <div className="flex items-center justify-center gap-3 mt-4">
+            <div className="flex items-center justify-center gap-3 mt-4 flex-wrap">
               <Button variant="outline" size="sm" className="gap-2" onClick={() => setZoom((z) => Math.max(0.6, +(z - 0.1).toFixed(2)))}>
                 <ZoomOut className="size-4" /> Zoom Out
               </Button>
@@ -483,7 +593,7 @@ function SeatLayoutsPage() {
 
         {/* Side panel (desktop) */}
         <aside className="hidden xl:block">
-          <SeatDetailsCard seat={selectedSeat} bus={currentBus} onToggleBlock={toggleBlock} onClear={() => setSelected(null)} />
+          <SeatDetailsCard seat={selectedSeat} bus={currentBus} arrangement={currentLayout.arrangement} onToggleBlock={toggleBlock} onClear={() => setSelected(null)} />
         </aside>
       </div>
 
@@ -494,7 +604,7 @@ function SeatLayoutsPage() {
             <SheetTitle>Seat Details</SheetTitle>
           </SheetHeader>
           <div className="p-5">
-            <SeatDetailsCard seat={selectedSeat} bus={currentBus} onToggleBlock={toggleBlock} onClear={() => setSelected(null)} embedded />
+            <SeatDetailsCard seat={selectedSeat} bus={currentBus} arrangement={currentLayout.arrangement} onToggleBlock={toggleBlock} onClear={() => setSelected(null)} embedded />
           </div>
         </SheetContent>
       </Sheet>
@@ -503,6 +613,24 @@ function SeatLayoutsPage() {
 }
 
 // ---------- Components ----------
+function SteeringWheel({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="2.2" />
+      <path d="M3.2 10.5c3 .4 5.2.9 6.6 1.5M20.8 10.5c-3 .4-5.2.9-6.6 1.5M12 14.2V21" />
+    </svg>
+  );
+}
+
 function Legend() {
   const items: { k: SeatStatus | "selected"; label: string }[] = [
     { k: "available", label: "Available" },
@@ -531,45 +659,143 @@ function Legend() {
 function SeatGrid({
   seats,
   deck,
+  arrangement,
+  statusFilter,
   selectedId,
   onSelect,
 }: {
   seats: Seat[];
   deck: DeckKey;
+  arrangement: SeatArrangement;
+  statusFilter: "all" | SeatStatus;
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
-  // Group seats by row
-  const rows = Array.from(new Set(seats.map((s) => s.row))).sort((a, b) => a - b);
-  const maxCol = Math.max(0, ...seats.map((s) => s.col));
+  const isTwoTwo = arrangement === "2-2";
+  const isDimmed = (seat: Seat) => statusFilter !== "all" && seat.status !== statusFilter;
+
+  if (isTwoTwo) {
+    return <SeaterGrid seats={seats} deck={deck} statusFilter={statusFilter} selectedId={selectedId} onSelect={onSelect} />;
+  }
+
+  // 2+1: two independent columns so beds / seats always span the same bus height.
+  const singleSeats = seats.filter((s) => s.col === SINGLE_COL).sort((a, b) => a.row - b.row);
+  const doubleSeats = seats.filter((s) => s.col === DOUBLE_COLS[0] || s.col === DOUBLE_COLS[1]);
+  const doubleRows = Array.from(new Set(doubleSeats.map((s) => s.row)))
+    .sort((a, b) => a - b)
+    .map((r) => {
+      const a = doubleSeats.find((s) => s.row === r && s.col === DOUBLE_COLS[0]);
+      const b = doubleSeats.find((s) => s.row === r && s.col === DOUBLE_COLS[1]);
+      return { r, seats: [a, b].filter(Boolean) as Seat[] };
+    });
 
   return (
-    <div className="space-y-2">
-      <div className="text-[10px] text-muted-foreground text-right pr-1">{deck === "lower" ? "Lower Deck" : "Upper Deck"}</div>
-      {rows.map((r, idx) => {
-        const rowSeats = seats.filter((s) => s.row === r);
-        // Insert aisle gap between row groups when row index jumps
-        const prevRow = rows[idx - 1];
-        const showAisle = prevRow !== undefined && r - prevRow > 1;
-        return (
-          <div key={r}>
-            {showAisle && (
-              <div className="my-2 flex items-center gap-2 text-[10px] text-muted-foreground">
-                <div className="flex-1 border-t border-dashed border-border" />
-                <span>Aisle</span>
-                <div className="flex-1 border-t border-dashed border-border" />
+    <div className="flex flex-col" style={{ gap: GRID_GAP }}>
+      <div className="flex items-center justify-between text-[9px] text-muted-foreground px-0.5">
+        <span>Single</span>
+        <span>{deck === "lower" ? "Lower Deck" : "Upper Deck"}</span>
+        <span>Double</span>
+      </div>
+
+      <div className="flex items-stretch" style={{ gap: GRID_GAP }}>
+        {/* Single / bed side */}
+        <div className="flex flex-col" style={{ width: SINGLE_W, gap: GRID_GAP }}>
+          {singleSeats.map((seat) => {
+            const selected = seat.id === selectedId;
+            if (seat.kind === "sleeper") {
+              return <BedCell key={seat.id} seat={seat} selected={selected} dimmed={isDimmed(seat)} onSelect={onSelect} />;
+            }
+            return <SeatCell key={seat.id} seat={seat} selected={selected} dimmed={isDimmed(seat)} onSelect={onSelect} />;
+          })}
+        </div>
+
+        {/* Aisle */}
+        <div style={{ width: AISLE_W }} />
+
+        {/* Double / seater side */}
+        <div className="flex flex-col" style={{ width: DOUBLE_W, gap: GRID_GAP }}>
+          {doubleRows.map((row) => {
+            const sleeperPair = row.seats.length === 2 && row.seats[0].kind === "sleeper";
+            if (sleeperPair) {
+              return (
+                <DoubleBedCell key={row.r} seats={row.seats} selectedId={selectedId} isDimmed={isDimmed} onSelect={onSelect} />
+              );
+            }
+            return (
+              <div key={row.r} className="flex" style={{ gap: GRID_GAP }}>
+                {row.seats.map((seat) => (
+                  <SeatCell key={seat.id} seat={seat} selected={seat.id === selectedId} dimmed={isDimmed(seat)} onSelect={onSelect} />
+                ))}
               </div>
-            )}
-            <div
-              className="grid gap-2"
-              style={{ gridTemplateColumns: `repeat(${maxCol + 1}, minmax(56px, 1fr))` }}
-            >
-              {Array.from({ length: maxCol + 1 }).map((_, c) => {
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SeaterGrid({
+  seats,
+  deck,
+  statusFilter,
+  selectedId,
+  onSelect,
+}: {
+  seats: Seat[];
+  deck: DeckKey;
+  statusFilter: "all" | SeatStatus;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const rows = Array.from(new Set(seats.map((s) => s.row))).sort((a, b) => a - b);
+  const isDimmed = (seat: Seat) => statusFilter !== "all" && seat.status !== statusFilter;
+
+  return (
+    <div className="flex flex-col" style={{ gap: GRID_GAP }}>
+      <div className="flex items-center justify-between text-[9px] text-muted-foreground px-0.5">
+        <span>Left seats</span>
+        <span>{deck === "lower" ? "Lower Deck" : "Upper Deck"}</span>
+        <span>Right seats</span>
+      </div>
+
+      {/* Front row (lower deck only): storage on the left, washrooms on the right */}
+      {deck === "lower" && (
+        <div className="grid" style={{ gridTemplateColumns: GRID_COLS_22, gap: GRID_GAP }}>
+          <div className="h-9 rounded-lg bg-muted/80 border border-border" title="Unavailable area" />
+          <div className="h-9 rounded-lg bg-muted/80 border border-border" title="Unavailable area" />
+          <div />
+          <WashroomCell />
+          <WashroomCell />
+        </div>
+      )}
+
+      {rows.map((r) => {
+        const rowSeats = seats.filter((s) => s.row === r);
+
+        // Back bench: seats spanning the full width (including the aisle position)
+        const isBackBench = rowSeats.some((s) => s.col === AISLE_COL_22);
+        if (isBackBench) {
+          const benchCols = [0, 1, AISLE_COL_22, 3, 4];
+          return (
+            <div key={r} className="grid" style={{ gridTemplateColumns: `repeat(${benchCols.length}, 1fr)`, gap: GRID_GAP }}>
+              {benchCols.map((c) => {
                 const seat = rowSeats.find((s) => s.col === c);
-                if (!seat) return <div key={c} className="h-14" />;
-                return <SeatCell key={seat.id} seat={seat} selected={seat.id === selectedId} onSelect={onSelect} />;
+                if (!seat) return <div key={c} className="h-9" />;
+                return <SeatCell key={seat.id} seat={seat} selected={seat.id === selectedId} dimmed={isDimmed(seat)} onSelect={onSelect} />;
               })}
             </div>
+          );
+        }
+
+        return (
+          <div key={r} className="grid" style={{ gridTemplateColumns: GRID_COLS_22, gap: GRID_GAP }}>
+            {Array.from({ length: 5 }).map((_, c) => {
+              if (c === AISLE_COL_22) return <div key={c} />;
+              const seat = rowSeats.find((s) => s.col === c);
+              if (!seat) return <div key={c} className="h-9" />;
+              return <SeatCell key={seat.id} seat={seat} selected={seat.id === selectedId} dimmed={isDimmed(seat)} onSelect={onSelect} />;
+            })}
           </div>
         );
       })}
@@ -577,26 +803,135 @@ function SeatGrid({
   );
 }
 
-function SeatCell({ seat, selected, onSelect }: { seat: Seat; selected: boolean; onSelect: (id: string) => void }) {
+function WashroomCell() {
+  return (
+    <div
+      className="h-9 flex-1 rounded-lg border-2 border-border bg-card grid place-items-center text-[9px] font-semibold text-muted-foreground"
+      title="Washroom"
+    >
+      WC
+    </div>
+  );
+}
+
+// Rectangular bunk for a single sleeper berth - uniform size on every bus/deck
+function BedCell({
+  seat,
+  selected,
+  dimmed,
+  onSelect,
+}: {
+  seat: Seat;
+  selected: boolean;
+  dimmed?: boolean;
+  onSelect: (id: string) => void;
+}) {
   const meta = STATUS_META[seat.status];
   return (
     <button
       onClick={() => onSelect(seat.id)}
       title={`${seat.label} · ${meta.label} · ₹${seat.price}`}
       className={cn(
-        "group relative h-14 rounded-xl border-2 px-2 py-1 text-xs font-semibold transition-all duration-150",
-        "flex flex-col items-center justify-center gap-0.5 cursor-pointer",
-        "shadow-[inset_0_-3px_0_rgba(0,0,0,0.06)] hover:-translate-y-0.5 hover:shadow-md",
+        "group relative w-full rounded-lg border-2 px-1 text-[11px] font-semibold transition-all duration-150",
+        "flex flex-col items-center justify-center gap-1",
+        "hover:-translate-y-0.5 hover:shadow-md",
         meta.seat,
         selected && meta.selected,
+        dimmed && "opacity-25",
+      )}
+      style={{ height: BED_H }}
+    >
+      {/* Pillow */}
+      <span className="h-1.5 w-4/5 rounded-full bg-current opacity-25" />
+      <span className="leading-none">{seat.label}</span>
+      {/* Foot end */}
+      <span className="h-1.5 w-4/5 rounded-sm bg-current opacity-10" />
+
+      {/* Tooltip */}
+      <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-navy text-navy-foreground text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition shadow-lg z-10">
+        {seat.label} · {meta.label} · ₹{seat.price}
+      </span>
+    </button>
+  );
+}
+
+// One wide rectangle representing a double bed, split into two clickable berths -
+// same height as every other bed in the application
+function DoubleBedCell({
+  seats,
+  selectedId,
+  isDimmed,
+  onSelect,
+}: {
+  seats: Seat[];
+  selectedId: string | null;
+  isDimmed: (seat: Seat) => boolean;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="flex rounded-lg overflow-hidden border-2" style={{ height: BED_H }}>
+      {seats.map((seat, i) => {
+        const meta = STATUS_META[seat.status];
+        return (
+          <button
+            key={seat.id}
+            onClick={() => onSelect(seat.id)}
+            title={`${seat.label} · ${meta.label} · ₹${seat.price}`}
+            className={cn(
+              "group relative flex-1 flex flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-all duration-150",
+              i > 0 && "border-l-2 border-border/60",
+              "hover:-translate-y-0.5 hover:shadow-md",
+              meta.seat,
+              seat.id === selectedId && meta.selected,
+              isDimmed(seat) && "opacity-25",
+            )}
+          >
+            <span className="h-1.5 w-4/5 rounded-full bg-current opacity-25" />
+            <span className="leading-none">{seat.label}</span>
+            <span className="h-1.5 w-4/5 rounded-sm bg-current opacity-10" />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SeatCell({
+  seat,
+  selected,
+  dimmed,
+  onSelect,
+}: {
+  seat: Seat;
+  selected: boolean;
+  dimmed?: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const meta = STATUS_META[seat.status];
+  return (
+    <button
+      onClick={() => onSelect(seat.id)}
+      title={`${seat.label} · ${meta.label} · ₹${seat.price}`}
+      className={cn(
+        "group relative h-9 w-full flex-1 rounded-t-xl rounded-b-md border-2 px-0.5 text-[11px] font-semibold transition-all duration-150",
+        "flex items-center justify-center gap-0.5 cursor-pointer",
+        "shadow-[inset_0_-3px_0_rgba(0,0,0,0.07)] hover:-translate-y-0.5 hover:shadow-md",
+        meta.seat,
+        selected && meta.selected,
+        dimmed && "opacity-25",
       )}
     >
+      {/* Armrests */}
+      <span className="pointer-events-none absolute -left-1 top-2 h-4 w-1 rounded-full bg-current opacity-30" />
+      <span className="pointer-events-none absolute -right-1 top-2 h-4 w-1 rounded-full bg-current opacity-30" />
+
       <span className="leading-none">{seat.label}</span>
-      {seat.status === "booked" && <User className="size-3 opacity-80" />}
-      {seat.status === "female" && <CircleUser className="size-3 opacity-80" />}
-      {seat.status === "blocked" && <X className="size-3 opacity-70" />}
+      {seat.status === "booked" && <User className="size-2.5 opacity-80" />}
+      {seat.status === "female" && <CircleUser className="size-2.5 opacity-80" />}
+      {seat.status === "blocked" && <X className="size-2.5 opacity-70" />}
+
       {/* Tooltip */}
-      <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-navy text-navy-foreground text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition shadow-lg z-10">
+      <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-navy text-navy-foreground text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition shadow-lg z-10">
         {seat.label} · {meta.label} · ₹{seat.price}
       </span>
     </button>
@@ -606,12 +941,14 @@ function SeatCell({ seat, selected, onSelect }: { seat: Seat; selected: boolean;
 function SeatDetailsCard({
   seat,
   bus,
+  arrangement,
   onToggleBlock,
   onClear,
   embedded,
 }: {
   seat: Seat | null;
   bus: { name: string; model: string };
+  arrangement: SeatArrangement;
   onToggleBlock: (id: string) => void;
   onClear: () => void;
   embedded?: boolean;
@@ -636,6 +973,15 @@ function SeatDetailsCard({
   }
 
   const meta = STATUS_META[seat.status];
+  const position = (() => {
+    if (arrangement === "2-2") {
+      if (seat.col === AISLE_COL_22) return "Back bench";
+      return seat.col < AISLE_COL_22 ? "Left pair" : "Right pair";
+    }
+    if (seat.col === SINGLE_COL) return "Single side";
+    if (seat.col === AISLE_COL) return "Back bench";
+    return "Double side";
+  })();
 
   return (
     <div className={cn("bg-card border border-border rounded-2xl shadow-sm overflow-hidden", embedded && "border-0 shadow-none rounded-none")}>
@@ -665,6 +1011,7 @@ function SeatDetailsCard({
         <dl className="divide-y divide-border text-sm">
           <Row label="Deck Type" value={seat.deck === "lower" ? "Lower Deck" : "Upper Deck"} />
           <Row label="Seat Type" value={seat.kind === "sleeper" ? "Sleeper" : "Seater"} />
+          <Row label="Position" value={position} />
           <Row label="Price" value={`₹${seat.price.toLocaleString("en-IN")}`} strong />
           <Row
             label="Status"
