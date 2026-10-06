@@ -853,23 +853,6 @@ function SeaterGrid({
         <span>Right seats</span>
       </div>
 
-      {/* Front row (lower deck only): storage on the left, washrooms on the right */}
-      {deck === "lower" && (
-        <div className="grid" style={{ gridTemplateColumns: GRID_COLS_22, gap: GRID_GAP }}>
-          <div
-            className="h-9 rounded-lg bg-muted/80 border border-border"
-            title="Unavailable area"
-          />
-          <div
-            className="h-9 rounded-lg bg-muted/80 border border-border"
-            title="Unavailable area"
-          />
-          <div />
-          <WashroomCell />
-          <WashroomCell />
-        </div>
-      )}
-
       {rows.map((r) => {
         const rowSeats = seats.filter((s) => s.row === r);
 
@@ -923,17 +906,6 @@ function SeaterGrid({
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function WashroomCell() {
-  return (
-    <div
-      className="h-9 flex-1 rounded-lg border-2 border-border bg-card grid place-items-center text-[9px] font-semibold text-muted-foreground"
-      title="Washroom"
-    >
-      WC
     </div>
   );
 }
