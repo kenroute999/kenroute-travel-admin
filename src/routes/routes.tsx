@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -46,13 +47,19 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { fareFieldsForType, type BusType, type FareKey } from "@/lib/buses";
+import { errorMessage } from "@/lib/api/client";
 import {
-  busFleet,
-  busByNo,
-  fareFieldsForType,
-  type BusType,
-  type FareKey,
-} from "@/lib/buses";
+  createSchedule,
+  deleteSchedule,
+  fleetKeys,
+  listBuses,
+  listSchedules,
+  scheduleBusType,
+  updateSchedule,
+  type Schedule,
+  type ScheduleInput,
+} from "@/lib/api/fleet";
 
 export const Route = createFileRoute("/routes")({
   head: () => ({
@@ -91,11 +98,15 @@ const formatTime = (t: string) => {
   return `${((h + 11) % 12) + 1}:${m[2]} ${suffix}`;
 };
 
-const isNextDay = (r: RouteRow) =>
-  Boolean(r.depDate && r.arrDate) && r.arrDate > r.depDate;
+const isNextDay = (r: RouteRow) => Boolean(r.depDate && r.arrDate) && r.arrDate > r.depDate;
 
 interface RouteRow {
+  /** Short label shown in the table. */
   id: string;
+  /** The trip this row is, in the database. */
+  tripId: string;
+  /** Tickets ever issued on it; a trip with bookings cannot be deleted. */
+  bookings: number;
   src: string;
   dst: string;
   busNo: string;
@@ -121,127 +132,62 @@ function collect(fd: FormData, name: string): string[] {
 
 function defaultFares(type: BusType): Partial<Record<FareKey, number>> {
   const base: Record<FareKey, number> = { seater: 850, singleBed: 1400, doubleBed: 900 };
-  return Object.fromEntries(
-    fareFieldsForType[type].map((f) => [f.key, base[f.key]]),
-  ) as Partial<Record<FareKey, number>>;
+  return Object.fromEntries(fareFieldsForType[type].map((f) => [f.key, base[f.key]])) as Partial<
+    Record<FareKey, number>
+  >;
 }
 
-// Sample rows are dated relative to today so every status is always on show.
-const sampleMoment = (days: number, hours = 0) =>
-  new Date(Date.now() + days * 86_400_000 + hours * 3_600_000);
-const sampleDay = (days: number, hours = 0) => format(sampleMoment(days, hours), "yyyy-MM-dd");
-const sampleClock = (hours: number) => format(sampleMoment(0, hours), "HH:mm");
+const FROM_API_STATUS: Record<Schedule["status"], Status> = {
+  SCHEDULED: "Active",
+  BOARDING: "Active",
+  IN_PROGRESS: "Active",
+  COMPLETED: "Completed",
+  CANCELLED: "Inactive",
+  MAINTENANCE: "Maintenance",
+};
+const TO_API_STATUS = {
+  Active: "ACTIVE",
+  Maintenance: "MAINTENANCE",
+  Inactive: "INACTIVE",
+} as const;
 
-const initialRows: RouteRow[] = [
-  {
-    id: "RTE-1001",
-    src: "Hyderabad",
-    dst: "Bangalore",
-    busNo: "TS 09 AB 1234",
-    busName: "Volvo B11R",
-    busColor: "text-emerald-500",
-    busType: "Sleeper (2+1)",
-    dep: "08:00 PM",
-    depDate: "2026-10-06",
-    arr: "05:30 AM",
-    arrDate: "2026-10-07",
-    boarding: ["Ameerpet", "LB Nagar", "Kothapet", "Mehdipatnam", "Shamshabad"],
-    dropping: ["Yelahanka", "Hebbal", "Majestic", "Shivajinagar", "Silk Board", "Electronic City", "Bangalore"],
-    fares: { singleBed: 1450, doubleBed: 950 },
-    status: "Active",
-  },
-  {
-    id: "RTE-1002",
-    src: "Hyderabad",
-    dst: "Vijayawada",
-    busNo: "TS 09 CD 5678",
-    busName: "Scania Metrolink",
-    busColor: "text-slate-700",
-    busType: "Seater (2+2)",
-    dep: "06:00 AM",
-    depDate: sampleDay(-1),
-    arr: "11:15 AM",
-    arrDate: sampleDay(-1),
-    boarding: ["Ameerpet", "Miyapur", "JNTU", "Kukatpally", "Uppal", "LB Nagar"],
-    dropping: ["Suryapet", "Khammam", "Gollapudi", "Benz Circle", "Governorpet", "Vijayawada"],
-    fares: { seater: 850 },
-    status: "Active",
-  },
-  {
-id: "RTE-1003",
-    src: "Bangalore",
-    dst: "Chennai",
-    busNo: "TS 09 EF 9101",
-    busName: "Volvo B11R",
-    busColor: "text-amber-500",
-    busType: "Sleeper (2+1)",
-    dep: "07:00 PM",
-    depDate: "2026-10-08",
-    arr: "02:15 AM",
-    arrDate: "2026-10-09",
-    boarding: ["Silk Board", "Marathahalli", "Hosur Road", "Electronic City", "Madiwala"],
-    dropping: ["Hosur", "Krishnagiri", "Vellore", "Sriperumbudur", "Tambaram", "Koyambedu", "Chennai"],
-    fares: { singleBed: 1350, doubleBed: 900 },
-    status: "Maintenance",
-  },
-  {
-    id: "RTE-1004",
-    src: "Hyderabad",
-    dst: "Chennai",
-    busNo: "TS 09 GH 1122",
-    busName: "Benz Dreamz",
-    busColor: "text-sky-600",
-    busType: "Seater/Sleeper (2+1)",
-    dep: sampleClock(-2),
-    depDate: sampleDay(0, -2),
-    arr: sampleClock(8),
-    arrDate: sampleDay(0, 8),
-    boarding: ["Ameerpet", "LB Nagar", "Sagar Road", "Dilsukhnagar", "Hayathnagar", "Uppal", "Kothapet"],
-    dropping: ["Ongole", "Nellore", "Gudur", "Sriperumbudur", "Tambaram", "Koyambedu", "Chennai"],
-    fares: { seater: 900, singleBed: 1400, doubleBed: 950 },
-    status: "Active",
-  },
-  {
-    id: "RTE-1005",
-    src: "Visakhapatnam",
-    dst: "Hyderabad",
-    busNo: "TS 09 IJ 3344",
-    busName: "Volvo B8R",
-    busColor: "text-rose-500",
-    busType: "Seater (2+2)",
-    dep: "08:30 PM",
-    depDate: "2026-10-07",
-    arr: "07:50 AM",
-    arrDate: "2026-10-08",
-    boarding: ["MVP Colony", "Maddilapalem", "Anakapalle", "Tuni", "Rajahmundry", "Vijayawada"],
-    dropping: ["Rajahmundry", "Eluru", "Vijayawada", "Khammam", "Suryapet", "LB Nagar", "Ameerpet"],
-    fares: { seater: 950 },
-    status: "Active",
-  },
-  {
-    id: "RTE-1006",
-    src: "Hyderabad",
-    dst: "Tirupati",
-    busNo: "TS 09 GH 1122",
-    busName: "Benz AC Sleeper",
-    busColor: "text-sky-600",
-    busType: "Seater/Sleeper (2+1)",
-    dep: "06:30 AM",
-    depDate: "2026-10-09",
-    arr: "12:45 PM",
-    arrDate: "2026-10-09",
-    boarding: ["Ameerpet", "Kukatpally", "LB Nagar", "Dilsukhnagar", "Kothapet"],
-    dropping: ["Kurnool", "Gooty", "Anantapur", "Madanapalle", "Renigunta", "Tirupati"],
-    fares: { seater: 800, singleBed: 1250, doubleBed: 850 },
-    status: "Inactive",
-  },
-];
+/** A saved trip as one row of this screen. Times are shown in the browser's local time. */
+function toRow(s: Schedule): RouteRow {
+  const busType = scheduleBusType(s);
+  const departs = new Date(s.departureAt);
+  const arrives = new Date(s.arrivalAt);
+  return {
+    id: `RTE-${s.id.slice(0, 4).toUpperCase()}`,
+    tripId: s.id,
+    bookings: s._count.bookings,
+    src: s.route.origin,
+    dst: s.route.destination,
+    busNo: s.bus.registrationNo,
+    busName: s.bus.name ?? "",
+    busColor: "text-brand",
+    busType,
+    dep: format(departs, "HH:mm"),
+    depDate: format(departs, "yyyy-MM-dd"),
+    arr: format(arrives, "HH:mm"),
+    arrDate: format(arrives, "yyyy-MM-dd"),
+    boarding: s.route.boardingPoints,
+    dropping: s.route.droppingPoints,
+    // Trips saved before fares were per seat kind carry one fare for every kind.
+    fares:
+      s.fares ??
+      (Object.fromEntries(
+        fareFieldsForType[busType].map((f) => [f.key, Number(s.fare)]),
+      ) as Partial<Record<FareKey, number>>),
+    status: FROM_API_STATUS[s.status],
+  };
+}
+
+type RouteDraft = Omit<RouteRow, "id" | "tripId" | "bookings">;
 
 const statusStyles: Record<Status, string> = {
   Active:
     "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400",
-  "In Transit":
-    "bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-500/10 dark:text-sky-400",
+  "In Transit": "bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-500/10 dark:text-sky-400",
   Completed:
     "bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-500/10 dark:text-violet-400",
   Maintenance:
@@ -319,7 +265,13 @@ function RoutePath({ src, dst }: { src: string; dst: string }) {
 }
 
 function RoutesPage() {
-  const [rows, setRows] = useState<RouteRow[]>(initialRows);
+  const queryClient = useQueryClient();
+  const busesQuery = useQuery({ queryKey: fleetKeys.buses, queryFn: listBuses });
+  const schedulesQuery = useQuery({ queryKey: fleetKeys.schedules, queryFn: listSchedules });
+  const busFleet = useMemo(() => busesQuery.data ?? [], [busesQuery.data]);
+  const busByNo = (no: string) => busFleet.find((b) => b.no === no);
+  const rows = useMemo(() => (schedulesQuery.data ?? []).map(toRow), [schedulesQuery.data]);
+  const loading = schedulesQuery.isPending;
   const [query, setQuery] = useState("");
   const [srcFilter, setSrcFilter] = useState("all");
   const [dstFilter, setDstFilter] = useState("all");
@@ -327,17 +279,11 @@ function RoutesPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [openAdd, setOpenAdd] = useState(false);
   const [assignedBusNo, setAssignedBusNo] = useState("");
-  const [loading, setLoading] = useState(true);
   const [viewing, setViewing] = useState<RouteRow | null>(null);
   const [editing, setEditing] = useState<RouteRow | null>(null);
   const [editBusNo, setEditBusNo] = useState("");
   // Statuses follow the clock, so re-check once a minute.
   const [now, setNow] = useState(() => new Date());
-
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(t);
-  }, []);
 
   useEffect(() => {
     const tick = setInterval(() => setNow(new Date()), 60_000);
@@ -371,9 +317,85 @@ function RoutesPage() {
     });
   }, [rows, query, srcFilter, dstFilter, typeFilter, statusFilter, now]);
 
-  const handleSave = (row: RouteRow) => {
-    setRows((prev) => [row, ...prev]);
-    setOpenAdd(false);
+  const refresh = () => queryClient.invalidateQueries({ queryKey: fleetKeys.schedules });
+
+  /** Checks a filled-in form and turns it into what the server stores. */
+  const toInput = (draft: RouteDraft): ScheduleInput | null => {
+    const bus = busByNo(draft.busNo);
+    if (!bus) {
+      toast.error("Choose a bus for this route");
+      return null;
+    }
+    if (!draft.src || !draft.dst) {
+      toast.error("Choose a source and a destination");
+      return null;
+    }
+    if (draft.src.trim().toLowerCase() === draft.dst.trim().toLowerCase()) {
+      toast.error("Source and destination must be different");
+      return null;
+    }
+    const departs = moment(draft.depDate, draft.dep);
+    const arrives = moment(draft.arrDate, draft.arr);
+    if (!departs || !arrives) {
+      toast.error("Enter the departure and arrival date and time");
+      return null;
+    }
+    if (arrives <= departs) {
+      toast.error("Arrival must be after departure");
+      return null;
+    }
+    if (Object.keys(draft.fares).length === 0) {
+      toast.error("Enter the fare");
+      return null;
+    }
+    const status =
+      draft.status === "Maintenance" || draft.status === "Inactive" ? draft.status : "Active";
+    return {
+      origin: draft.src.trim(),
+      destination: draft.dst.trim(),
+      busId: bus.id,
+      departureAt: departs.toISOString(),
+      arrivalAt: arrives.toISOString(),
+      boardingPoints: draft.boarding,
+      droppingPoints: draft.dropping,
+      fares: draft.fares,
+      status: TO_API_STATUS[status],
+    };
+  };
+
+  const create = useMutation({
+    mutationFn: createSchedule,
+    onSuccess: () => {
+      toast.success("Route saved. It is now on sale to agents.");
+      setOpenAdd(false);
+      return refresh();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const update = useMutation({
+    mutationFn: ({ tripId, input }: { tripId: string; input: ScheduleInput }) =>
+      updateSchedule(tripId, input),
+    onSuccess: () => {
+      toast.success("Route updated");
+      setEditing(null);
+      return refresh();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const remove = useMutation({
+    mutationFn: deleteSchedule,
+    onSuccess: () => {
+      toast.success("Route deleted");
+      return refresh();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const handleSave = (draft: RouteDraft & { id?: string }) => {
+    const input = toInput(draft);
+    if (input) create.mutate(input);
   };
 
   const openEdit = (row: RouteRow) => {
@@ -382,31 +404,14 @@ function RoutesPage() {
   };
 
   const handleDelete = (row: RouteRow) => {
-    if (!window.confirm(`Delete route ${row.id} (${row.src} → ${row.dst})?`)) return;
-    setRows((prev) => prev.filter((r) => r.id !== row.id));
-    toast.success(`Route ${row.id} deleted`);
+    if (window.confirm(`Delete route ${row.id} (${row.src} → ${row.dst})?`))
+      remove.mutate(row.tripId);
   };
 
   const handleUpdate = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!editing) return;
     const fd = new FormData(e.currentTarget);
-    const src = String(fd.get("src")).trim();
-    const dst = String(fd.get("dst")).trim();
-    if (src.toLowerCase() === dst.toLowerCase()) {
-      toast.error("Source and destination must be different");
-      return;
-    }
-    const depDate = String(fd.get("depDate"));
-    const dep = String(fd.get("dep"));
-    const arrDate = String(fd.get("arrDate"));
-    const arr = String(fd.get("arr"));
-    const departs = moment(depDate, dep);
-    const arrives = moment(arrDate, arr);
-    if (!departs || !arrives || arrives <= departs) {
-      toast.error("Arrival must be after departure");
-      return;
-    }
     const bus = busByNo(editBusNo);
     const busType = bus?.type ?? editing.busType;
     const fares: Partial<Record<FareKey, number>> = {};
@@ -420,27 +425,32 @@ function RoutesPage() {
         .map((stop) => stop.trim())
         .filter(Boolean);
 
-    const updated: RouteRow = {
+    const input = toInput({
       ...editing,
-      src,
-      dst,
-      busNo: bus?.no ?? editing.busNo,
-      busName: bus?.name ?? editing.busName,
-      busColor: bus?.color ?? editing.busColor,
+      src: String(fd.get("src")),
+      dst: String(fd.get("dst")),
+      busNo: editBusNo,
       busType,
-      depDate,
-      dep,
-      arrDate,
-      arr,
+      depDate: String(fd.get("depDate")),
+      dep: String(fd.get("dep")),
+      arrDate: String(fd.get("arrDate")),
+      arr: String(fd.get("arr")),
       boarding: stops("boarding"),
       dropping: stops("dropping"),
       fares,
       status: (fd.get("status") as ManualStatus) || "Active",
-    };
-    setRows((prev) => prev.map((r) => (r.id === editing.id ? updated : r)));
-    setEditing(null);
-    toast.success(`Route ${updated.id} updated`);
+    });
+    if (input) update.mutate({ tripId: editing.tripId, input });
   };
+
+  // Figures for the cards, from what is saved.
+  const today = format(now, "yyyy-MM-dd");
+  const pairs = new Map<string, number>();
+  for (const r of rows)
+    pairs.set(`${r.src} → ${r.dst}`, (pairs.get(`${r.src} → ${r.dst}`) ?? 0) + 1);
+  const topRoute = [...pairs].sort((a, b) => b[1] - a[1])[0];
+  const onSale = rows.filter((r) => liveStatus(r, now) === "Active").length;
+  const todayTrips = rows.filter((r) => r.depDate === today).length;
 
   return (
     <>
@@ -460,10 +470,34 @@ function RoutesPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Total Routes" value="156" delta="12 this month" icon={RouteIcon} tone="brand" />
-        <StatCard label="Active Routes" value="142" delta="18 this month" icon={Navigation} tone="info" />
-        <StatCard label="Today Trips" value="48" delta="8 today" icon={BusFront} tone="warning" />
-        <StatCard label="Top Route" value="Hyd → Bang" delta="32 trips · ₹3,24,560" icon={Trophy} tone="navy" />
+        <StatCard
+          label="Total Routes"
+          value={String(pairs.size)}
+          delta={`${rows.length} trips scheduled`}
+          icon={RouteIcon}
+          tone="brand"
+        />
+        <StatCard
+          label="Active Trips"
+          value={String(onSale)}
+          delta="on sale now"
+          icon={Navigation}
+          tone="info"
+        />
+        <StatCard
+          label="Today Trips"
+          value={String(todayTrips)}
+          delta="departing today"
+          icon={BusFront}
+          tone="warning"
+        />
+        <StatCard
+          label="Top Route"
+          value={topRoute ? topRoute[0] : "—"}
+          delta={topRoute ? `${topRoute[1]} trips` : "no trips yet"}
+          icon={Trophy}
+          tone="navy"
+        />
       </div>
 
       {/* Table card */}
@@ -488,7 +522,9 @@ function RoutesPage() {
               <SelectContent>
                 <SelectItem value="all">All Sources</SelectItem>
                 {cities.map((c) => (
-                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -499,7 +535,9 @@ function RoutesPage() {
               <SelectContent>
                 <SelectItem value="all">All Destinations</SelectItem>
                 {cities.map((c) => (
-                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -510,7 +548,9 @@ function RoutesPage() {
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
                 {Object.keys(fareFieldsForType).map((t) => (
-                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -560,7 +600,7 @@ function RoutesPage() {
                   ))
                 : filtered.map((r) => (
                     <tr
-                      key={r.id}
+                      key={r.tripId}
                       className="border-t border-border transition-colors hover:bg-brand/[0.04] group"
                     >
                       <td className="px-6 py-4">
@@ -601,9 +641,7 @@ function RoutesPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-xs">
-                          <div className="text-foreground">
-                            {r.boarding.slice(0, 2).join(", ")}
-                          </div>
+                          <div className="text-foreground">{r.boarding.slice(0, 2).join(", ")}</div>
                           {r.boarding.length > 2 && (
                             <button className="text-brand hover:underline font-medium mt-0.5">
                               +{r.boarding.length - 2} more
@@ -613,9 +651,7 @@ function RoutesPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-xs">
-                          <div className="text-foreground">
-                            {r.dropping.slice(0, 2).join(", ")}
-                          </div>
+                          <div className="text-foreground">{r.dropping.slice(0, 2).join(", ")}</div>
                           {r.dropping.length > 2 && (
                             <button className="text-brand hover:underline font-medium mt-0.5">
                               +{r.dropping.length - 2} more
@@ -685,7 +721,7 @@ function RoutesPage() {
           <p className="text-sm text-muted-foreground">
             Showing <span className="font-medium text-foreground">1</span> to{" "}
             <span className="font-medium text-foreground">{filtered.length}</span> of{" "}
-            <span className="font-medium text-foreground">156</span> routes
+            <span className="font-medium text-foreground">{rows.length}</span> routes
           </p>
           <div className="flex items-center gap-1">
             <button className="size-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
@@ -793,10 +829,20 @@ function RoutesPage() {
               >
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Source" required>
-                    <Input name="src" defaultValue={editing.src} required className="h-11 rounded-xl" />
+                    <Input
+                      name="src"
+                      defaultValue={editing.src}
+                      required
+                      className="h-11 rounded-xl"
+                    />
                   </Field>
                   <Field label="Destination" required>
-                    <Input name="dst" defaultValue={editing.dst} required className="h-11 rounded-xl" />
+                    <Input
+                      name="dst"
+                      defaultValue={editing.dst}
+                      required
+                      className="h-11 rounded-xl"
+                    />
                   </Field>
                 </div>
                 <Field label="Assigned Bus" required>
@@ -821,23 +867,55 @@ function RoutesPage() {
                 </Field>
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Departure Date" required>
-                    <Input name="depDate" type="date" defaultValue={editing.depDate} required className="h-11 rounded-xl" />
+                    <Input
+                      name="depDate"
+                      type="date"
+                      defaultValue={editing.depDate}
+                      required
+                      className="h-11 rounded-xl"
+                    />
                   </Field>
                   <Field label="Departure Time" required>
-                    <Input name="dep" type="time" defaultValue={to24h(editing.dep)} required className="h-11 rounded-xl" />
+                    <Input
+                      name="dep"
+                      type="time"
+                      defaultValue={to24h(editing.dep)}
+                      required
+                      className="h-11 rounded-xl"
+                    />
                   </Field>
                   <Field label="Arrival Date" required>
-                    <Input name="arrDate" type="date" defaultValue={editing.arrDate} required className="h-11 rounded-xl" />
+                    <Input
+                      name="arrDate"
+                      type="date"
+                      defaultValue={editing.arrDate}
+                      required
+                      className="h-11 rounded-xl"
+                    />
                   </Field>
                   <Field label="Arrival Time" required>
-                    <Input name="arr" type="time" defaultValue={to24h(editing.arr)} required className="h-11 rounded-xl" />
+                    <Input
+                      name="arr"
+                      type="time"
+                      defaultValue={to24h(editing.arr)}
+                      required
+                      className="h-11 rounded-xl"
+                    />
                   </Field>
                 </div>
                 <Field label="Boarding Points (comma separated)">
-                  <Input name="boarding" defaultValue={editing.boarding.join(", ")} className="h-11 rounded-xl" />
+                  <Input
+                    name="boarding"
+                    defaultValue={editing.boarding.join(", ")}
+                    className="h-11 rounded-xl"
+                  />
                 </Field>
                 <Field label="Dropping Points (comma separated)">
-                  <Input name="dropping" defaultValue={editing.dropping.join(", ")} className="h-11 rounded-xl" />
+                  <Input
+                    name="dropping"
+                    defaultValue={editing.dropping.join(", ")}
+                    className="h-11 rounded-xl"
+                  />
                 </Field>
                 <div className="grid grid-cols-2 gap-4">
                   {fareFieldsForType[busByNo(editBusNo)?.type ?? editing.busType].map((f) => (
@@ -944,30 +1022,36 @@ function RoutesPage() {
               });
             }}
           >
+            {/* Suggestions for the two city boxes; a new city can simply be typed. */}
+            <datalist id="route-cities">
+              {cities.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Source City" required>
-                <Select name="src">
-                  <SelectTrigger className="h-11 rounded-xl">
-                    <SelectValue placeholder="Select source" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cities.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  name="src"
+                  list="route-cities"
+                  placeholder="Type or pick source"
+                  required
+                  minLength={2}
+                  maxLength={60}
+                  autoComplete="off"
+                  className="h-11 rounded-xl"
+                />
               </Field>
               <Field label="Destination City" required>
-                <Select name="dst">
-                  <SelectTrigger className="h-11 rounded-xl">
-                    <SelectValue placeholder="Select destination" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cities.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  name="dst"
+                  list="route-cities"
+                  placeholder="Type or pick destination"
+                  required
+                  minLength={2}
+                  maxLength={60}
+                  autoComplete="off"
+                  className="h-11 rounded-xl"
+                />
               </Field>
             </div>
 
@@ -982,8 +1066,8 @@ function RoutesPage() {
             <DateTimeField label="Departure" dateName="depDate" timeName="dep" />
             <DateTimeField label="Arrival" dateName="arrDate" timeName="arr" />
             <p className="text-xs text-muted-foreground">
-              For overnight journeys pick the arrival date on day 2 — it is marked
-              with a +1 day badge in the table.
+              For overnight journeys pick the arrival date on day 2 — it is marked with a +1 day
+              badge in the table.
             </p>
 
             <div className="grid grid-cols-2 gap-4">
@@ -996,10 +1080,7 @@ function RoutesPage() {
             </div>
 
             <Field label="Assign Bus" required>
-              <Select
-                value={assignedBusNo}
-                onValueChange={(v) => setAssignedBusNo(v)}
-              >
+              <Select value={assignedBusNo} onValueChange={(v) => setAssignedBusNo(v)}>
                 <SelectTrigger className="h-11 rounded-xl">
                   <SelectValue placeholder="Select bus" />
                 </SelectTrigger>
@@ -1014,8 +1095,7 @@ function RoutesPage() {
               <input type="hidden" name="bus" value={assignedBusNo} />
               {assignedBusNo && busByNo(assignedBusNo) && (
                 <p className="text-xs text-brand mt-1.5">
-                  {busByNo(assignedBusNo)!.type} ·{" "}
-                  {busByNo(assignedBusNo)!.seats} seats
+                  {busByNo(assignedBusNo)!.type} · {busByNo(assignedBusNo)!.seats} seats
                 </p>
               )}
             </Field>
@@ -1158,13 +1238,7 @@ function DateTimeField({
   );
 }
 
-function PointsInput({
-  name,
-  placeholder,
-}: {
-  name: string;
-  placeholder: string;
-}) {
+function PointsInput({ name, placeholder }: { name: string; placeholder: string }) {
   const [points, setPoints] = useState<string[]>([""]);
   const refs = useRef<Array<HTMLInputElement | null>>([]);
 
@@ -1206,9 +1280,7 @@ function PointsInput({
             required
             onChange={(e) => {
               const v = e.target.value;
-              setPoints((prev) =>
-                prev.map((item, idx) => (idx === i ? v : item)),
-              );
+              setPoints((prev) => prev.map((item, idx) => (idx === i ? v : item)));
             }}
             onKeyDown={(e) => onKeyDown(e, i)}
             placeholder={i === 0 ? placeholder : "Add another point"}
@@ -1248,7 +1320,9 @@ function PointsInput({
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1 border-t border-border pt-4">
-      <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </div>
       <div className="font-medium text-foreground">{children}</div>
     </div>
   );

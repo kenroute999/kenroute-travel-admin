@@ -41,7 +41,7 @@ export function AppSidebar() {
   }
 
   return (
-    <aside className="hidden md:flex flex-col w-64 shrink-0 bg-navy text-navy-foreground border-r border-sidebar-border">
+    <aside className="hidden md:flex flex-col w-64 shrink-0 sticky top-0 h-screen bg-navy text-navy-foreground border-r border-sidebar-border">
       <div className="h-20 flex items-center gap-3 px-5 border-b border-sidebar-border">
         <div className="size-10 rounded-lg bg-white/95 flex items-center justify-center p-1 shadow-sm">
           <img src={logo} alt="KenRoute" className="size-full object-contain" />
