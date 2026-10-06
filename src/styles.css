@@ -133,3 +133,22 @@
     -webkit-font-smoothing: antialiased;
   }
 }
+
+/* Printing a ticket: when a page marks one with .print-area, print only that. */
+@media print {
+  body:has(.print-area) * {
+    visibility: hidden;
+  }
+  body:has(.print-area) .print-area,
+  body:has(.print-area) .print-area * {
+    visibility: visible;
+  }
+  body:has(.print-area) .print-area {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    max-width: 30rem;
+    overflow: visible;
+  }
+}
