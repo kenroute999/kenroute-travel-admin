@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import {
   ArrowRight,
   BusFront,
@@ -67,7 +68,11 @@ export const Route = createFileRoute("/routes")({
   component: RoutesPage,
 });
 
-type Status = "Active" | "Inactive" | "Maintenance";
+// The owner sets Active, Maintenance or Inactive. "In Transit" and "Completed"
+// are never set by hand: an Active trip moves through them by the clock.
+type Status = "Active" | "In Transit" | "Completed" | "Maintenance" | "Inactive";
+type ManualStatus = Extract<Status, "Active" | "Maintenance" | "Inactive">;
+const STATUSES: Status[] = ["Active", "In Transit", "Completed", "Maintenance", "Inactive"];
 
 const parseDay = (iso: string) => {
   const [y, m, d] = iso.split("-").map(Number);
@@ -121,6 +126,12 @@ function defaultFares(type: BusType): Partial<Record<FareKey, number>> {
   ) as Partial<Record<FareKey, number>>;
 }
 
+// Sample rows are dated relative to today so every status is always on show.
+const sampleMoment = (days: number, hours = 0) =>
+  new Date(Date.now() + days * 86_400_000 + hours * 3_600_000);
+const sampleDay = (days: number, hours = 0) => format(sampleMoment(days, hours), "yyyy-MM-dd");
+const sampleClock = (hours: number) => format(sampleMoment(0, hours), "HH:mm");
+
 const initialRows: RouteRow[] = [
   {
     id: "RTE-1001",
@@ -148,9 +159,9 @@ const initialRows: RouteRow[] = [
     busColor: "text-slate-700",
     busType: "Seater (2+2)",
     dep: "06:00 AM",
-    depDate: "2026-10-07",
+    depDate: sampleDay(-1),
     arr: "11:15 AM",
-    arrDate: "2026-10-07",
+    arrDate: sampleDay(-1),
     boarding: ["Ameerpet", "Miyapur", "JNTU", "Kukatpally", "Uppal", "LB Nagar"],
     dropping: ["Suryapet", "Khammam", "Gollapudi", "Benz Circle", "Governorpet", "Vijayawada"],
     fares: { seater: 850 },
@@ -171,7 +182,7 @@ id: "RTE-1003",
     boarding: ["Silk Board", "Marathahalli", "Hosur Road", "Electronic City", "Madiwala"],
     dropping: ["Hosur", "Krishnagiri", "Vellore", "Sriperumbudur", "Tambaram", "Koyambedu", "Chennai"],
     fares: { singleBed: 1350, doubleBed: 900 },
-    status: "Active",
+    status: "Maintenance",
   },
   {
     id: "RTE-1004",
@@ -181,10 +192,10 @@ id: "RTE-1003",
     busName: "Benz Dreamz",
     busColor: "text-sky-600",
     busType: "Seater/Sleeper (2+1)",
-    dep: "09:00 PM",
-    depDate: "2026-10-06",
-    arr: "07:30 AM",
-    arrDate: "2026-10-07",
+    dep: sampleClock(-2),
+    depDate: sampleDay(0, -2),
+    arr: sampleClock(8),
+    arrDate: sampleDay(0, 8),
     boarding: ["Ameerpet", "LB Nagar", "Sagar Road", "Dilsukhnagar", "Hayathnagar", "Uppal", "Kothapet"],
     dropping: ["Ongole", "Nellore", "Gudur", "Sriperumbudur", "Tambaram", "Koyambedu", "Chennai"],
     fares: { seater: 900, singleBed: 1400, doubleBed: 950 },
@@ -229,17 +240,52 @@ id: "RTE-1003",
 const statusStyles: Record<Status, string> = {
   Active:
     "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400",
+  "In Transit":
+    "bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-500/10 dark:text-sky-400",
+  Completed:
+    "bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-500/10 dark:text-violet-400",
   Maintenance:
-    "bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-500/10 dark:text-orange-400",
-  Inactive:
     "bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-500/10 dark:text-rose-400",
+  Inactive:
+    "bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-500/10 dark:text-slate-400",
 };
 
 const statusDot: Record<Status, string> = {
   Active: "bg-emerald-500",
-  Maintenance: "bg-orange-500",
-  Inactive: "bg-rose-500",
+  "In Transit": "bg-sky-500 animate-pulse",
+  Completed: "bg-violet-500",
+  Maintenance: "bg-rose-500",
+  Inactive: "bg-slate-400",
 };
+
+/** "08:00 PM" or "20:00" as "20:00"; "" when it is not a time. */
+function to24h(time: string): string {
+  const m = time.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!m) return "";
+  let hour = Number(m[1]);
+  const meridiem = m[3]?.toUpperCase();
+  if (meridiem === "PM" && hour < 12) hour += 12;
+  if (meridiem === "AM" && hour === 12) hour = 0;
+  return `${String(hour).padStart(2, "0")}:${m[2]}`;
+}
+
+function moment(dateIso: string, time: string): Date | null {
+  const clock = to24h(time);
+  if (!dateIso || !clock) return null;
+  const at = new Date(`${dateIso}T${clock}:00`);
+  return Number.isNaN(at.getTime()) ? null : at;
+}
+
+/** What the trip is doing right now. Maintenance and Inactive stay as the owner set them. */
+function liveStatus(r: RouteRow, now: Date): Status {
+  if (r.status !== "Active") return r.status;
+  const departs = moment(r.depDate, r.dep);
+  const arrives = moment(r.arrDate, r.arr);
+  if (!departs || !arrives) return "Active";
+  if (now >= arrives) return "Completed";
+  if (now >= departs) return "In Transit";
+  return "Active";
+}
 
 function StatusBadge({ status }: { status: Status }) {
   return (
@@ -282,10 +328,20 @@ function RoutesPage() {
   const [openAdd, setOpenAdd] = useState(false);
   const [assignedBusNo, setAssignedBusNo] = useState("");
   const [loading, setLoading] = useState(true);
+  const [viewing, setViewing] = useState<RouteRow | null>(null);
+  const [editing, setEditing] = useState<RouteRow | null>(null);
+  const [editBusNo, setEditBusNo] = useState("");
+  // Statuses follow the clock, so re-check once a minute.
+  const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 600);
     return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    const tick = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(tick);
   }, []);
 
   const cities = useMemo(() => {
@@ -310,14 +366,80 @@ function RoutesPage() {
       const matchSrc = srcFilter === "all" || r.src === srcFilter;
       const matchDst = dstFilter === "all" || r.dst === dstFilter;
       const matchType = typeFilter === "all" || r.busType === typeFilter;
-      const matchStatus = statusFilter === "all" || r.status === statusFilter;
+      const matchStatus = statusFilter === "all" || liveStatus(r, now) === statusFilter;
       return matchQ && matchSrc && matchDst && matchType && matchStatus;
     });
-  }, [rows, query, srcFilter, dstFilter, typeFilter, statusFilter]);
+  }, [rows, query, srcFilter, dstFilter, typeFilter, statusFilter, now]);
 
   const handleSave = (row: RouteRow) => {
     setRows((prev) => [row, ...prev]);
     setOpenAdd(false);
+  };
+
+  const openEdit = (row: RouteRow) => {
+    setEditing(row);
+    setEditBusNo(row.busNo);
+  };
+
+  const handleDelete = (row: RouteRow) => {
+    if (!window.confirm(`Delete route ${row.id} (${row.src} → ${row.dst})?`)) return;
+    setRows((prev) => prev.filter((r) => r.id !== row.id));
+    toast.success(`Route ${row.id} deleted`);
+  };
+
+  const handleUpdate = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editing) return;
+    const fd = new FormData(e.currentTarget);
+    const src = String(fd.get("src")).trim();
+    const dst = String(fd.get("dst")).trim();
+    if (src.toLowerCase() === dst.toLowerCase()) {
+      toast.error("Source and destination must be different");
+      return;
+    }
+    const depDate = String(fd.get("depDate"));
+    const dep = String(fd.get("dep"));
+    const arrDate = String(fd.get("arrDate"));
+    const arr = String(fd.get("arr"));
+    const departs = moment(depDate, dep);
+    const arrives = moment(arrDate, arr);
+    if (!departs || !arrives || arrives <= departs) {
+      toast.error("Arrival must be after departure");
+      return;
+    }
+    const bus = busByNo(editBusNo);
+    const busType = bus?.type ?? editing.busType;
+    const fares: Partial<Record<FareKey, number>> = {};
+    for (const f of fareFieldsForType[busType]) {
+      const v = Number(fd.get(`fare_${f.key}`) || 0);
+      if (v > 0) fares[f.key] = v;
+    }
+    const stops = (name: string) =>
+      String(fd.get(name))
+        .split(",")
+        .map((stop) => stop.trim())
+        .filter(Boolean);
+
+    const updated: RouteRow = {
+      ...editing,
+      src,
+      dst,
+      busNo: bus?.no ?? editing.busNo,
+      busName: bus?.name ?? editing.busName,
+      busColor: bus?.color ?? editing.busColor,
+      busType,
+      depDate,
+      dep,
+      arrDate,
+      arr,
+      boarding: stops("boarding"),
+      dropping: stops("dropping"),
+      fares,
+      status: (fd.get("status") as ManualStatus) || "Active",
+    };
+    setRows((prev) => prev.map((r) => (r.id === editing.id ? updated : r)));
+    setEditing(null);
+    toast.success(`Route ${updated.id} updated`);
   };
 
   return (
@@ -398,9 +520,11 @@ function RoutesPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Maintenance">Maintenance</SelectItem>
-                <SelectItem value="Inactive">Inactive</SelectItem>
+                {STATUSES.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -515,24 +639,27 @@ function RoutesPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <StatusBadge status={r.status} />
+                        <StatusBadge status={liveStatus(r, now)} />
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-1">
                           <button
                             aria-label="View"
+                            onClick={() => setViewing(r)}
                             className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-slate-100 hover:text-slate-700 transition-all hover:scale-110"
                           >
                             <Eye className="size-4" />
                           </button>
                           <button
                             aria-label="Edit"
+                            onClick={() => openEdit(r)}
                             className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-brand/10 hover:text-brand transition-all hover:scale-110"
                           >
                             <Pencil className="size-4" />
                           </button>
                           <button
                             aria-label="Delete"
+                            onClick={() => handleDelete(r)}
                             className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-rose-50 hover:text-rose-600 transition-all hover:scale-110"
                           >
                             <Trash2 className="size-4" />
@@ -583,6 +710,189 @@ function RoutesPage() {
           </div>
         </div>
       </div>
+
+      {/* View Route slide-over */}
+      <Sheet open={viewing !== null} onOpenChange={(open) => !open && setViewing(null)}>
+        <SheetContent className="w-full sm:max-w-md flex flex-col p-0">
+          {viewing && (
+            <>
+              <SheetHeader className="p-6 border-b border-border">
+                <SheetTitle className="text-xl">
+                  {viewing.src} → {viewing.dst}
+                </SheetTitle>
+                <SheetDescription>Route {viewing.id}</SheetDescription>
+              </SheetHeader>
+              <div className="flex-1 overflow-y-auto p-6 space-y-5 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Status</span>
+                  <StatusBadge status={liveStatus(viewing, now)} />
+                </div>
+                <Detail label="Assigned Bus">
+                  {viewing.busNo} · {viewing.busName}
+                  <div className="text-xs text-muted-foreground">{viewing.busType}</div>
+                </Detail>
+                <Detail label="Departure">
+                  {formatDay(viewing.depDate)}, {formatTime(viewing.dep)}
+                </Detail>
+                <Detail label="Arrival">
+                  {formatDay(viewing.arrDate)}, {formatTime(viewing.arr)}
+                </Detail>
+                <Detail label="Boarding Points">{viewing.boarding.join(", ") || "—"}</Detail>
+                <Detail label="Dropping Points">{viewing.dropping.join(", ") || "—"}</Detail>
+                <Detail label="Fares">
+                  {fareFieldsForType[viewing.busType].map((f) => (
+                    <div key={f.key} className="flex justify-between gap-6">
+                      <span className="text-muted-foreground">{f.label}</span>
+                      <span className="font-semibold">
+                        ₹{(viewing.fares[f.key] ?? 0).toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  ))}
+                </Detail>
+              </div>
+              <SheetFooter className="p-6 border-t border-border bg-muted/20 flex-row gap-3 sm:justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => setViewing(null)}
+                  className="h-11 rounded-xl px-5 flex-1 sm:flex-none"
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={() => {
+                    openEdit(viewing);
+                    setViewing(null);
+                  }}
+                  className="h-11 rounded-xl px-5 bg-brand text-brand-foreground hover:bg-brand/90 flex-1 sm:flex-none"
+                >
+                  <Pencil className="size-4" />
+                  Edit Route
+                </Button>
+              </SheetFooter>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Edit Route slide-over */}
+      <Sheet open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
+        <SheetContent className="w-full sm:max-w-md flex flex-col p-0">
+          {editing && (
+            <>
+              <SheetHeader className="p-6 border-b border-border">
+                <SheetTitle className="text-xl">Edit Route</SheetTitle>
+                <SheetDescription>
+                  {editing.id} · {editing.src} → {editing.dst}
+                </SheetDescription>
+              </SheetHeader>
+              <form
+                key={editing.id}
+                id="edit-route-form"
+                className="flex-1 overflow-y-auto p-6 space-y-5"
+                onSubmit={handleUpdate}
+              >
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Source" required>
+                    <Input name="src" defaultValue={editing.src} required className="h-11 rounded-xl" />
+                  </Field>
+                  <Field label="Destination" required>
+                    <Input name="dst" defaultValue={editing.dst} required className="h-11 rounded-xl" />
+                  </Field>
+                </div>
+                <Field label="Assigned Bus" required>
+                  <Select value={editBusNo} onValueChange={setEditBusNo}>
+                    <SelectTrigger className="h-11 rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {/* A bus that is no longer in the fleet list stays selectable for this route. */}
+                      {!busByNo(editing.busNo) && (
+                        <SelectItem value={editing.busNo}>
+                          {editing.busNo} — {editing.busName}
+                        </SelectItem>
+                      )}
+                      {busFleet.map((b) => (
+                        <SelectItem key={b.no} value={b.no}>
+                          {b.no} — {b.name} ({b.type})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Departure Date" required>
+                    <Input name="depDate" type="date" defaultValue={editing.depDate} required className="h-11 rounded-xl" />
+                  </Field>
+                  <Field label="Departure Time" required>
+                    <Input name="dep" type="time" defaultValue={to24h(editing.dep)} required className="h-11 rounded-xl" />
+                  </Field>
+                  <Field label="Arrival Date" required>
+                    <Input name="arrDate" type="date" defaultValue={editing.arrDate} required className="h-11 rounded-xl" />
+                  </Field>
+                  <Field label="Arrival Time" required>
+                    <Input name="arr" type="time" defaultValue={to24h(editing.arr)} required className="h-11 rounded-xl" />
+                  </Field>
+                </div>
+                <Field label="Boarding Points (comma separated)">
+                  <Input name="boarding" defaultValue={editing.boarding.join(", ")} className="h-11 rounded-xl" />
+                </Field>
+                <Field label="Dropping Points (comma separated)">
+                  <Input name="dropping" defaultValue={editing.dropping.join(", ")} className="h-11 rounded-xl" />
+                </Field>
+                <div className="grid grid-cols-2 gap-4">
+                  {fareFieldsForType[busByNo(editBusNo)?.type ?? editing.busType].map((f) => (
+                    <Field key={f.key} label={`${f.label} Fare (₹)`} required>
+                      <Input
+                        name={`fare_${f.key}`}
+                        type="number"
+                        min={1}
+                        step={1}
+                        defaultValue={editing.fares[f.key]}
+                        required
+                        className="h-11 rounded-xl"
+                      />
+                    </Field>
+                  ))}
+                </div>
+                <Field label="Status" required>
+                  <Select name="status" defaultValue={editing.status}>
+                    <SelectTrigger className="h-11 rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Active">Active</SelectItem>
+                      <SelectItem value="Maintenance">Maintenance</SelectItem>
+                      <SelectItem value="Inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    An Active route shows In Transit after departure and Completed after arrival by
+                    itself.
+                  </p>
+                </Field>
+              </form>
+              <SheetFooter className="p-6 border-t border-border bg-muted/20 flex-row gap-3 sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditing(null)}
+                  className="h-11 rounded-xl px-5 flex-1 sm:flex-none"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  form="edit-route-form"
+                  className="h-11 rounded-xl px-5 bg-brand text-brand-foreground hover:bg-brand/90 flex-1 sm:flex-none"
+                >
+                  <Save className="size-4" />
+                  Save Changes
+                </Button>
+              </SheetFooter>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
 
       {/* Add Route slide-over */}
       <Sheet open={openAdd} onOpenChange={setOpenAdd}>
@@ -931,6 +1241,15 @@ function PointsInput({
       <p className="text-xs text-muted-foreground">
         Press Enter or the + button to add another point.
       </p>
+    </div>
+  );
+}
+
+function Detail({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1 border-t border-border pt-4">
+      <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="font-medium text-foreground">{children}</div>
     </div>
   );
 }
