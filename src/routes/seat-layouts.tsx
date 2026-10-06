@@ -57,8 +57,30 @@ export const Route = createFileRoute("/seat-layouts")({
       },
     ],
   }),
-  component: SeatLayoutsPage,
+  component: SeatLayoutsRoute,
 });
+
+interface SeatLayoutsPageProps {
+  initialBusId?: string;
+  initialPassenger?: string;
+  initialBookingMode?: boolean;
+  onBooked?: (info: {
+    busId: string;
+    busName: string;
+    seats: string[];
+    passenger: string;
+    gender: PassengerGender;
+    bookingId: string;
+  }) => void;
+}
+
+export function SeatLayoutsPage(props: SeatLayoutsPageProps = {}) {
+  return <SeatLayoutsPageImpl {...props} />;
+}
+
+function SeatLayoutsRoute() {
+  return <SeatLayoutsPage />;
+}
 
 // ---------- Types ----------
 type SeatStatus = "available" | "booked" | "female" | "blocked";
@@ -256,13 +278,14 @@ const DOUBLE_COLS = [2, 3];
 const PAIR_COLS_22 = [0, 1, 3, 4];
 
 // Uniform sizing so every bus type has the SAME outer width (224px inner body)
-// and every bed is the SAME size (58x78 single, 130x78 double) on every bus/deck:
-//  2+1: [ single 58 ] [ aisle 24 ] [ double 130 ]
-//  2+2: [ seat 44 ] [ seat 44 ] [ aisle 24 ] [ seat 44 ] [ seat 44 ]
-const SEAT_W = 44; // px - single seater seat
-const SINGLE_W = 58; // px - single bed column (uniform bed width, slightly reduced)
-const DOUBLE_W = 130; // px - double bed column (spans 2 seat widths)
-const AISLE_W = 24; // px
+// and every bed is the SAME size (52x78 single, 116x78 double) on every bus/deck;
+// seats slightly narrower, aisle wider.
+//  2+1: [ single 52 ] [ aisle 44 ] [ double 116 ]
+//  2+2: [ seat 39 ] [ seat 39 ] [ aisle 44 ] [ seat 39 ] [ seat 39 ]
+const SEAT_W = 39; // px - single seater seat
+const SINGLE_W = 52; // px - single bed column (uniform bed width, slightly reduced)
+const DOUBLE_W = 116; // px - double bed column (spans 2 seat widths)
+const AISLE_W = 44; // px
 const BED_H = 78; // px - uniform bed height for every bed in every bus/deck
 const GRID_GAP = 6; // px
 const GRID_COLS_22 = `${SEAT_W}px ${SEAT_W}px ${AISLE_W}px ${SEAT_W}px ${SEAT_W}px`;
@@ -406,19 +429,37 @@ const LEGEND_ITEMS: { k: SeatStatus | "selected" | "maleOnly"; label: string }[]
 ];
 
 // ---------- Page ----------
-function SeatLayoutsPage() {
-  const [busId, setBusId] = useState(BUSES[0].id);
-  const [layoutType, setLayoutType] = useState<LayoutId>(BUSES[0].layout);
+function SeatLayoutsPageImpl({
+  initialBusId,
+  initialPassenger,
+  initialBookingMode,
+  onBooked,
+}: {
+  initialBusId?: string;
+  initialPassenger?: string;
+  initialBookingMode?: boolean;
+  onBooked?: (info: {
+    busId: string;
+    busName: string;
+    seats: string[];
+    passenger: string;
+    gender: PassengerGender;
+    bookingId: string;
+  }) => void;
+} = {}) {
+  const initialBus = BUSES.find((b) => b.id === initialBusId) ?? BUSES[0];
+  const [busId, setBusId] = useState(initialBus.id);
+  const [layoutType, setLayoutType] = useState<LayoutId>(initialBus.layout);
   const [deck, setDeck] = useState<DeckKey>("lower");
   const [statusFilter, setStatusFilter] = useState<"all" | SeatStatus>("all");
   const [zoom, setZoom] = useState(1);
   const [seats, setSeats] = useState<Seat[]>(() =>
-    refreshReservations(seedSeats(BUSES[0].id, BUSES[0].layout), LAYOUTS[BUSES[0].layout].arrangement),
+    refreshReservations(seedSeats(initialBus.id, initialBus.layout), LAYOUTS[initialBus.layout].arrangement),
   );
   const [selected, setSelected] = useState<string | null>(null);
 
   // Booking simulation state
-  const [bookingMode, setBookingMode] = useState(false);
+  const [bookingMode, setBookingMode] = useState(initialBookingMode ?? false);
   const [ticketCount, setTicketCount] = useState<1 | 2>(1);
   const [passengerGender, setPassengerGender] = useState<PassengerGender>("female");
   const [cart, setCart] = useState<string[]>([]);
@@ -538,7 +579,8 @@ function SeatLayoutsPage() {
       }
     }
     const bookingId = `BKG-${Math.floor(100000 + Math.random() * 900000)}`;
-    const passenger = DEMO_PASSENGER_NAMES[Math.floor(Math.random() * DEMO_PASSENGER_NAMES.length)];
+    const passenger =
+      initialPassenger ?? DEMO_PASSENGER_NAMES[Math.floor(Math.random() * DEMO_PASSENGER_NAMES.length)];
     const genderLabel = passengerGender === "female" ? "Female" : "Male";
     const next = seats.map((s) => {
       if (!cart.includes(s.id)) return s;
@@ -556,6 +598,7 @@ function SeatLayoutsPage() {
     toast.success(`${genderLabel} booking confirmed for seat(s) ${labels} (${bookingId})`);
     setCart([]);
     setSelected(null);
+    onBooked?.({ busId, busName: currentBus.name, seats: labels.split(", "), passenger, gender: passengerGender, bookingId });
   };
 
   return (
@@ -1078,11 +1121,15 @@ function SeaterGrid({
         if (isBackBench) {
           const benchCols = [0, 1, AISLE_COL_22, 3, 4];
           return (
-            <div key={r} className="grid" style={{ gridTemplateColumns: `repeat(${benchCols.length}, 1fr)`, gap: GRID_GAP }}>
+            <div key={r} className="flex justify-center" style={{ gap: GRID_GAP }}>
               {benchCols.map((c) => {
                 const seat = rowSeats.find((s) => s.col === c);
-                if (!seat) return <div key={c} className="h-9" />;
-                return <SeatCell key={seat.id} seat={seat} selected={isSel(seat.id)} dimmed={isDimmed(seat)} onSelect={onSelect} />;
+                if (!seat) return <div key={c} className="h-9" style={{ width: SEAT_W }} />;
+                return (
+                  <div key={seat.id} style={{ width: SEAT_W }}>
+                    <SeatCell seat={seat} selected={isSel(seat.id)} dimmed={isDimmed(seat)} onSelect={onSelect} />
+                  </div>
+                );
               })}
             </div>
           );

@@ -48,6 +48,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { busFleet } from "@/lib/buses";
+import { SeatLayoutsPage } from "./seat-layouts";
 
 export const Route = createFileRoute("/bookings")({
   head: () => ({
@@ -89,6 +91,22 @@ interface Booking {
   status: BookingStatus;
   initials: string;
   avatarTone: string;
+}
+
+interface Trip {
+  id: string;
+  busNo: string;
+  name: string;
+  type: string;
+  ac: string;
+  seats: number;
+  from: string;
+  to: string;
+  depart: string;
+  arrive: string;
+  duration: string;
+  price: number;
+  seatsAvailable: number;
 }
 
 const initial: Booking[] = [
@@ -691,16 +709,44 @@ function NewBookingSheet({ open, onOpenChange, existingRoutes, onCreate }: NewBo
   const [seat, setSeat] = useState("");
   const [seatType, setSeatType] = useState<"Lower" | "Upper">("Lower");
   const [journey, setJourney] = useState("");
-  const [depart, setDepart] = useState("");
-  const [arrive, setArrive] = useState("");
   const [amount, setAmount] = useState("");
   const [payment, setPayment] = useState<PaymentStatus>("Paid");
   const [status, setStatus] = useState<BookingStatus>("Confirmed");
   const [source, setSource] = useState<BookingSource>("Counter");
 
+  // Bus selection flow state
+  const [busesOpen, setBusesOpen] = useState(false);
+  const [seatView, setSeatView] = useState<Trip | null>(null);
+  const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
+
+  // Buses available for the chosen route (mocked timings/fares)
+  const trips: Trip[] = useMemo(() => {
+    const departOptions = ["06:30 AM", "09:00 PM", "10:15 PM", "11:45 PM", "02:10 PM"];
+    return busFleet
+      .filter((b) => b.status !== "Inactive")
+      .map((b, i) => {
+        const fare = b.type.startsWith("Sleeper/Seater") || b.type.startsWith("Seater/Sleeper") ? 800 : b.type.startsWith("Sleeper") ? 1250 : 650;
+        return {
+          id: b.no.replace(/\s+/g, ""),
+          busNo: b.no,
+          name: b.name,
+          type: b.type,
+          ac: b.ac,
+          seats: b.seats,
+          from,
+          to,
+          depart: departOptions[i % departOptions.length],
+          arrive: i % 2 === 0 ? "06:30 AM (+1d)" : "07:45 AM (+1d)",
+          duration: "9h 30m",
+          price: fare + i * 120,
+          seatsAvailable: Math.max(4, b.seats - 12 - i * 3),
+        };
+      });
+  }, [from, to]);
+
   const reset = () => {
     setPassenger(""); setPhone(""); setAge(""); setBoarding(""); setDropping("");
-    setBus(""); setSeat(""); setJourney(""); setDepart(""); setArrive(""); setAmount("");
+    setBus(""); setSeat(""); setJourney(""); setAmount(""); setSelectedTrip(null); setSeatView(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -720,15 +766,15 @@ function NewBookingSheet({ open, onOpenChange, existingRoutes, onCreate }: NewBo
       idProof, from, to,
       boarding: boarding || from,
       dropping: dropping || to,
-      bus: bus || "TS 09 XX 0000",
-      busName,
+      bus: selectedTrip?.busNo || bus || "TS 09 XX 0000",
+      busName: selectedTrip?.name ?? busName,
       seat: seat || "L1",
       seatType,
       journey: journey || new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-      depart: depart || "08:00 PM",
-      arrive: arrive || "06:00 AM",
-      duration: "9h 30m",
-      amount: Number(amount),
+      depart: selectedTrip?.depart || "08:00 PM",
+      arrive: selectedTrip?.arrive || "06:00 AM",
+      duration: selectedTrip?.duration || "9h 30m",
+      amount: selectedTrip ? selectedTrip.price : Number(amount),
       payment, status,
       initials,
       avatarTone: AVATAR_TONES[Math.floor(Math.random() * AVATAR_TONES.length)],
@@ -739,6 +785,7 @@ function NewBookingSheet({ open, onOpenChange, existingRoutes, onCreate }: NewBo
   };
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-xl flex flex-col p-0 gap-0">
         <SheetHeader className="p-5 border-b border-border space-y-0">
@@ -787,30 +834,30 @@ function NewBookingSheet({ open, onOpenChange, existingRoutes, onCreate }: NewBo
               <Field label="Boarding Point"><Input value={boarding} onChange={(e) => setBoarding(e.target.value)} placeholder="Ameerpet" className="h-10 rounded-lg" /></Field>
               <Field label="Dropping Point"><Input value={dropping} onChange={(e) => setDropping(e.target.value)} placeholder="Silk Board" className="h-10 rounded-lg" /></Field>
               <Field label="Journey Date"><Input value={journey} onChange={(e) => setJourney(e.target.value)} placeholder="20 May 2025" className="h-10 rounded-lg" /></Field>
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="Departure"><Input value={depart} onChange={(e) => setDepart(e.target.value)} placeholder="08:00 PM" className="h-10 rounded-lg" /></Field>
-                <Field label="Arrival"><Input value={arrive} onChange={(e) => setArrive(e.target.value)} placeholder="05:30 AM" className="h-10 rounded-lg" /></Field>
-              </div>
             </div>
           </section>
 
           <section className="space-y-3">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bus & Seat</h3>
+            <Button type="button" variant="outline" className="w-full h-11 rounded-lg gap-2" onClick={() => setBusesOpen(true)}>
+              <BusFront className="size-4" />
+              Buses for {from || "—"} → {to || "—"}
+            </Button>
+            {selectedTrip && (
+              <div className="rounded-xl border border-border bg-muted/40 p-3 space-y-1.5 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold">{selectedTrip.busNo}</span>
+                  <span className="font-bold text-brand">₹{selectedTrip.price}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {selectedTrip.name} • {selectedTrip.type} • {selectedTrip.ac}
+                </p>
+                <p className="text-xs font-medium">
+                  {selectedTrip.depart} → {selectedTrip.arrive} • {selectedTrip.duration} • {selectedTrip.seatsAvailable} seats left
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Bus Number"><Input value={bus} onChange={(e) => setBus(e.target.value)} placeholder="TS 09 AB 1234" className="h-10 rounded-lg" /></Field>
-              <Field label="Bus Name">
-                <Select value={busName} onValueChange={setBusName}>
-                  <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Volvo B11R">Volvo B11R</SelectItem>
-                    <SelectItem value="Volvo B8R">Volvo B8R</SelectItem>
-                    <SelectItem value="Scania Metrolink">Scania Metrolink</SelectItem>
-                    <SelectItem value="Scania MultiAxle">Scania MultiAxle</SelectItem>
-                    <SelectItem value="Benz Dreamz">Benz Dreamz</SelectItem>
-                    <SelectItem value="Benz AC Sleeper">Benz AC Sleeper</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
               <Field label="Seat No."><Input value={seat} onChange={(e) => setSeat(e.target.value)} placeholder="L3" className="h-10 rounded-lg" /></Field>
               <Field label="Seat Type">
                 <Select value={seatType} onValueChange={(v) => setSeatType(v as "Lower" | "Upper")}>
@@ -874,6 +921,120 @@ function NewBookingSheet({ open, onOpenChange, existingRoutes, onCreate }: NewBo
         </form>
       </SheetContent>
     </Sheet>
+
+    {/* Buses for the selected route (left slide-over, rest of the screen) */}
+    <Sheet open={busesOpen} onOpenChange={setBusesOpen}>
+      <SheetContent side="left" className="w-full sm:max-w-2xl flex flex-col p-0 gap-0">
+        <SheetHeader className="p-5 border-b border-border space-y-0">
+          <SheetTitle className="flex items-center gap-2 text-lg">
+            <BusFront className="size-5 text-brand" />
+            Buses for this route
+          </SheetTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            {from || "—"} → {to || "—"} • {trips.length} buses
+          </p>
+        </SheetHeader>
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {trips.map((t) => (
+            <div key={t.id} className="rounded-xl border border-border p-4 space-y-3 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BusFront className="size-4 text-brand" />
+                  <span className="font-semibold">{t.busNo}</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">{t.type}</span>
+                </div>
+                <span className="text-lg font-bold text-brand">₹{t.price.toLocaleString("en-IN")}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">{t.name} • {t.ac} • {t.seats} seats</p>
+              <div className="flex items-center justify-between text-sm">
+                <div>
+                  <p className="font-bold">{t.depart}</p>
+                  <p className="text-[11px] text-muted-foreground">{t.from}</p>
+                </div>
+                <p className="flex-1 px-4 text-center text-[11px] text-muted-foreground">{t.duration}</p>
+                <div className="text-right">
+                  <p className="font-bold">{t.arrive}</p>
+                  <p className="text-[11px] text-muted-foreground">{t.to}</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-border">
+                <p className="text-[11px] text-muted-foreground">{t.seatsAvailable} seats available</p>
+                <Button
+                  size="sm"
+                  className="gap-2 bg-brand text-brand-foreground hover:bg-brand/90"
+                  onClick={() => {
+                    setSelectedTrip(t);
+                    setBusesOpen(false);
+                    setSeatView(t);
+                  }}
+                >
+                  Select • View Seats
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </SheetContent>
+    </Sheet>
+
+    {/* Seat layout for the selected bus - booking happens here */}
+    {seatView && (
+      <div className="fixed inset-0 z-[200] bg-background flex flex-col">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border bg-card shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <BusFront className="size-5 text-brand shrink-0" />
+            <div className="min-w-0">
+              <p className="font-semibold truncate">{seatView.busNo} • {seatView.name}</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {seatView.from} → {seatView.to} • {seatView.depart} → {seatView.arrive} • {seatView.duration} • ₹{seatView.price.toLocaleString("en-IN")}
+              </p>
+            </div>
+          </div>
+          <Button variant="outline" onClick={() => setSeatView(null)}>Close</Button>
+        </div>
+        <div className="flex-1 overflow-y-auto bg-muted/20">
+          <SeatLayoutsPage
+            initialBusId={seatView.id}
+            initialPassenger={passenger || undefined}
+            initialBookingMode
+            onBooked={(info) => {
+              const amount = info.seats.length * seatView.price;
+              onCreate({
+                id: `KR-${Math.floor(10428 + Math.random() * 999)}`,
+                pnr: info.bookingId,
+                source,
+                passenger: info.passenger,
+                phone,
+                gender: info.gender === "female" ? "Female" : "Male",
+                age: Number(age) || 25,
+                idProof,
+                from,
+                to,
+                boarding: boarding || from,
+                dropping: dropping || to,
+                bus: seatView.busNo,
+                busName: seatView.name,
+                seat: info.seats.join(", "),
+                seatType: "Lower",
+                journey: journey || new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+                depart: seatView.depart,
+                arrive: seatView.arrive,
+                duration: seatView.duration,
+                amount,
+                payment,
+                status,
+                initials: info.passenger.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase(),
+                avatarTone: AVATAR_TONES[Math.floor(Math.random() * AVATAR_TONES.length)],
+              });
+              setSeatView(null);
+              setBusesOpen(false);
+              onOpenChange(false);
+            }}
+          />
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
