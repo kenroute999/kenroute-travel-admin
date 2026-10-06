@@ -20,6 +20,10 @@ import {
   ZoomOut,
   DoorOpen,
   Bus as BusIcon,
+  Mars,
+  Venus,
+  Ticket,
+  TicketCheck,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatCard } from "@/components/ui/stat-card";
@@ -60,6 +64,7 @@ export const Route = createFileRoute("/seat-layouts")({
 type SeatStatus = "available" | "booked" | "female" | "blocked";
 type SeatKind = "sleeper" | "seater";
 type DeckKey = "lower" | "upper";
+type PassengerGender = "male" | "female";
 
 interface Seat {
   id: string;
@@ -70,6 +75,7 @@ interface Seat {
   kind: SeatKind;
   status: SeatStatus;
   price: number;
+  reservedFor?: "male" | "female"; // seat is held for this gender only (its pair partner is occupied)
   passenger?: string;
   bookingId?: string;
   bookingDate?: string;
@@ -167,6 +173,78 @@ const BUSES = busFleet.map((b) => ({
   model: `${b.name} · ${b.type}`,
   layout: LAYOUT_BY_TYPE[b.type],
 }));
+
+// ---------- Booking rules (gender-based adjacency) ----------
+// A "pair" is the berth/seat unit a passenger is spread across:
+//  - 2+1: single side is on its own; the two double berths of a row share a pair.
+//  - 2+2: left pair (cols 0,1) and right pair (cols 3,4) share a row; a back-bench
+//    seat is paired with its immediate left/right neighbours.
+function pairPartners(seat: Seat, all: Seat[], arrangement: SeatArrangement): Seat[] {
+  if (arrangement === "2-1") {
+    if (seat.col === SINGLE_COL) return [];
+    return all.filter(
+      (x) => x.deck === seat.deck && x.row === seat.row && x.id !== seat.id && (x.col === DOUBLE_COLS[0] || x.col === DOUBLE_COLS[1]),
+    );
+  }
+  if (seat.col === AISLE_COL_22) {
+    return all.filter((x) => x.deck === seat.deck && x.row === seat.row && Math.abs(x.col - seat.col) === 1);
+  }
+  const base = seat.col < AISLE_COL_22 ? 0 : 3;
+  return all.filter((x) => x.deck === seat.deck && x.row === seat.row && x.id !== seat.id && x.col >= base && x.col <= base + 1);
+}
+
+// Why a passenger of the given gender cannot take this seat (null = allowed).
+function blockBookingReason(
+  seat: Seat | undefined,
+  gender: PassengerGender,
+  all: Seat[],
+  arrangement: SeatArrangement,
+): string | null {
+  if (!seat) return "Seat not found";
+  if (seat.status === "blocked") return `Seat ${seat.label} is blocked`;
+  if (seat.status === "booked") return `Seat ${seat.label} is already booked`;
+  if (seat.status === "female" && gender !== "female") return `Seat ${seat.label} is reserved for female passengers`;
+  if (seat.status === "available" && seat.reservedFor === "male" && gender !== "male")
+    return `Seat ${seat.label} is reserved for male passengers`;
+  if (seat.status === "available" && seat.reservedFor === "female" && gender !== "female")
+    return `Seat ${seat.label} is reserved for female passengers`;
+
+  // A seat beside (pairing with) an occupied seat can only be taken by the same gender.
+  for (const p of pairPartners(seat, all, arrangement)) {
+    if (p.status === "booked" && gender !== "male")
+      return `Seat ${p.label} beside it is booked by a male passenger`;
+    if (p.status === "female" && gender !== "female")
+      return `Seat ${p.label} beside it is reserved for a female passenger`;
+  }
+  return null;
+}
+
+// After an available seat's pair partner is occupied by someone of gender G,
+// the free seat is auto-held for the same gender (female -> pink reserved,
+// male -> dashed-blue male-only). Occupied seats and their own data are untouched.
+function propagateReservations(rows: Seat[], arrangement: SeatArrangement): Seat[] {
+  return rows.map((s) => {
+    if (s.status !== "available") return s;
+    const occupation = pairPartners(s, rows, arrangement).find(
+      (p) => p.status === "booked" || p.status === "female",
+    );
+    if (!occupation) return s;
+    const gender: PassengerGender = occupation.status === "booked" ? "male" : "female";
+    return {
+      ...s,
+      reservedFor: gender,
+      status: gender === "female" ? "female" : "available",
+    };
+  });
+}
+
+// Rebuilds reservations from scratch based on who is currently occupying seats.
+function refreshReservations(rows: Seat[], arrangement: SeatArrangement): Seat[] {
+  const cleared = rows.map((s) => ({ ...s, reservedFor: undefined }));
+  return propagateReservations(cleared, arrangement);
+}
+
+const DEMO_PASSENGER_NAMES = ["Priya Sharma", "Rahul Verma", "Sneha Rao", "Vikram Singh", "Neha Patel"];
 
 // Indian layout (right-hand traffic, driver on the right, door on the left):
 //  2+1: [ single ] [ aisle ] [ double ] [ double ]
@@ -269,15 +347,17 @@ const STATUS_META: Record<SeatStatus, { label: string; dot: string; chip: string
     chip: "bg-success/15 text-success border-success/25",
     seat:
       "bg-gradient-to-b from-success/20 to-success/10 border-success/40 text-success hover:from-success/30 hover:to-success/15",
-    selected: "ring-2 ring-chart-5 ring-offset-2 ring-offset-background",
+    selected:
+      "ring-[3px] ring-chart-5 ring-offset-2 ring-offset-background shadow-lg shadow-chart-5/20 brightness-110",
   },
   booked: {
     label: "Booked",
-    dot: "bg-danger",
-    chip: "bg-danger/15 text-danger border-danger/25",
+    dot: "bg-blue-500",
+    chip: "bg-blue-100 text-blue-700 border-blue-200",
     seat:
-      "bg-gradient-to-b from-danger/25 to-danger/15 border-danger/40 text-danger hover:from-danger/35 hover:to-danger/20",
-    selected: "ring-2 ring-chart-5 ring-offset-2 ring-offset-background",
+      "bg-gradient-to-b from-blue-500/20 to-blue-400/10 border-blue-500/40 text-blue-600 hover:from-blue-500/30 hover:to-blue-400/15",
+    selected:
+      "ring-[3px] ring-chart-5 ring-offset-2 ring-offset-background shadow-lg shadow-chart-5/20 brightness-110",
   },
   female: {
     label: "Female Reserved",
@@ -285,17 +365,45 @@ const STATUS_META: Record<SeatStatus, { label: string; dot: string; chip: string
     chip: "bg-pink-100 text-pink-600 border-pink-200",
     seat:
       "bg-gradient-to-b from-pink-200/70 to-pink-100/60 border-pink-300 text-pink-600 hover:from-pink-300/70 hover:to-pink-200/60",
-    selected: "ring-2 ring-chart-5 ring-offset-2 ring-offset-background",
+    selected:
+      "ring-[3px] ring-chart-5 ring-offset-2 ring-offset-background shadow-lg shadow-chart-5/20 brightness-110",
   },
   blocked: {
     label: "Blocked",
-    dot: "bg-muted-foreground",
-    chip: "bg-muted text-muted-foreground border-border",
+    dot: "bg-gray-400",
+    chip: "bg-gray-100 text-gray-600 border-gray-200",
     seat:
-      "bg-gradient-to-b from-muted to-muted/60 border-border text-muted-foreground hover:from-muted",
-    selected: "ring-2 ring-chart-5 ring-offset-2 ring-offset-background",
+      "bg-gradient-to-b from-gray-400/15 to-gray-400/5 border-dashed border-gray-300/70 text-gray-500 hover:from-gray-400/20 hover:to-gray-400/10",
+    selected:
+      "ring-[3px] ring-chart-5 ring-offset-2 ring-offset-background shadow-lg shadow-chart-5/20 brightness-110",
   },
 };
+
+// Available seat held for male passengers only (its pair partner is male-booked)
+const MALE_RESERVED_SEAT =
+  "bg-gradient-to-b from-blue-500/10 to-blue-400/5 border-dashed border-blue-400/50 text-blue-500 hover:from-blue-500/15 hover:to-blue-400/5";
+
+// Available seat held for female passengers only (its pair partner is female-booked)
+const FEMALE_RESERVED_SEAT =
+  "bg-gradient-to-b from-pink-200/40 to-pink-100/30 border-dashed border-pink-300/50 text-pink-400 hover:from-pink-300/50 hover:to-pink-200/30";
+
+// Held seats (beside an occupied pair partner) get a dotted border matching their gender;
+// booked/available seats use the normal status styling.
+function heldSeatStyle(seat: Seat, meta: { seat: string }): string {
+  if (seat.status === "available" && seat.reservedFor === "male") return MALE_RESERVED_SEAT;
+  if (seat.reservedFor === "female") return FEMALE_RESERVED_SEAT;
+  return meta.seat;
+}
+
+// ---------- Legends ----------
+const LEGEND_ITEMS: { k: SeatStatus | "selected" | "maleOnly"; label: string }[] = [
+  { k: "available", label: "Available" },
+  { k: "booked", label: "Booked" },
+  { k: "female", label: "Female Reserved" },
+  { k: "maleOnly", label: "Male Only" },
+  { k: "blocked", label: "Blocked" },
+  { k: "selected", label: "Selected / In cart" },
+];
 
 // ---------- Page ----------
 function SeatLayoutsPage() {
@@ -304,19 +412,31 @@ function SeatLayoutsPage() {
   const [deck, setDeck] = useState<DeckKey>("lower");
   const [statusFilter, setStatusFilter] = useState<"all" | SeatStatus>("all");
   const [zoom, setZoom] = useState(1);
-  const [seats, setSeats] = useState<Seat[]>(() => seedSeats(BUSES[0].id, BUSES[0].layout));
+  const [seats, setSeats] = useState<Seat[]>(() =>
+    refreshReservations(seedSeats(BUSES[0].id, BUSES[0].layout), LAYOUTS[BUSES[0].layout].arrangement),
+  );
   const [selected, setSelected] = useState<string | null>(null);
+
+  // Booking simulation state
+  const [bookingMode, setBookingMode] = useState(false);
+  const [ticketCount, setTicketCount] = useState<1 | 2>(1);
+  const [passengerGender, setPassengerGender] = useState<PassengerGender>("female");
+  const [cart, setCart] = useState<string[]>([]);
 
   const currentBus = BUSES.find((b) => b.id === busId)!;
   const currentLayout = LAYOUTS[layoutType];
   const hasUpperDeck = currentLayout.upper != null;
   const availableDecks: DeckKey[] = hasUpperDeck ? ["lower", "upper"] : ["lower"];
 
+  const seededSeats = (id: string, layout: LayoutId) =>
+    refreshReservations(seedSeats(id, layout), LAYOUTS[layout].arrangement);
+
   // Applies a layout to a bus: regenerates seats and makes sure the deck is valid
   const applyLayout = (id: string, layout: LayoutId) => {
     setLayoutType(layout);
-    setSeats(seedSeats(id, layout));
+    setSeats(seededSeats(id, layout));
     setSelected(null);
+    setCart([]);
     setDeck("lower");
   };
 
@@ -362,16 +482,80 @@ function SeatLayoutsPage() {
 
   const selectedSeat = seats.find((s) => s.id === selected) ?? null;
 
-  const updateSeat = (id: string, patch: Partial<Seat>) => {
-    setSeats((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-  };
+  // Seats highlighted on the layout: booking cart in booking mode, the viewed seat otherwise.
+  const highlightedIds = bookingMode ? cart : selected ? [selected] : [];
 
   const toggleBlock = (id: string) => {
     const s = seats.find((x) => x.id === id);
     if (!s) return;
     const next: SeatStatus = s.status === "blocked" ? "available" : "blocked";
-    updateSeat(id, { status: next, passenger: undefined, bookingId: undefined });
+    const patched = seats.map((x) =>
+      x.id === id
+        ? { ...x, status: next, passenger: undefined, bookingId: undefined, reservedFor: undefined }
+        : x,
+    );
+    setSeats(refreshReservations(patched, currentLayout.arrangement));
+    setCart([]);
     toast.success(`Seat ${s.label} ${next === "blocked" ? "blocked" : "released"}`);
+  };
+
+  // Click behaviour: view details in normal mode, add to a booking cart in booking mode.
+  const handleSeatClick = (id: string) => {
+    const seat = seats.find((s) => s.id === id);
+    if (!seat) return;
+    if (!bookingMode) {
+      setSelected(id === selected ? null : id);
+      return;
+    }
+    if (cart.includes(id)) {
+      setCart((c) => c.filter((s) => s !== id));
+      return;
+    }
+    if (cart.length >= ticketCount) {
+      toast.info(`This booking has ${ticketCount} ticket${ticketCount > 1 ? "s" : ""}. Remove a seat or confirm first.`);
+      return;
+    }
+    const reason = blockBookingReason(seat, passengerGender, seats, currentLayout.arrangement);
+    if (reason) {
+      toast.error(reason);
+      return;
+    }
+    setSelected(id);
+    setCart((c) => [...c, id]);
+  };
+
+  const confirmBooking = () => {
+    if (cart.length === 0) {
+      toast.error("Select at least one seat first");
+      return;
+    }
+    for (const id of cart) {
+      const seat = seats.find((s) => s.id === id);
+      const reason = blockBookingReason(seat, passengerGender, seats, currentLayout.arrangement);
+      if (reason) {
+        toast.error(reason);
+        return;
+      }
+    }
+    const bookingId = `BKG-${Math.floor(100000 + Math.random() * 900000)}`;
+    const passenger = DEMO_PASSENGER_NAMES[Math.floor(Math.random() * DEMO_PASSENGER_NAMES.length)];
+    const genderLabel = passengerGender === "female" ? "Female" : "Male";
+    const next = seats.map((s) => {
+      if (!cart.includes(s.id)) return s;
+      return {
+        ...s,
+        status: (passengerGender === "female" ? "female" : "booked") as SeatStatus,
+        reservedFor: undefined,
+        passenger,
+        bookingId,
+        bookingDate: "06 Oct 2026",
+      };
+    });
+    setSeats(refreshReservations(next, currentLayout.arrangement));
+    const labels = cart.map((id) => seats.find((s) => s.id === id)!.label).join(", ");
+    toast.success(`${genderLabel} booking confirmed for seat(s) ${labels} (${bookingId})`);
+    setCart([]);
+    setSelected(null);
   };
 
   return (
@@ -479,6 +663,124 @@ function SeatLayoutsPage() {
             </div>
           </div>
 
+          {/* Booking simulation */}
+          <div className="bg-card border border-border rounded-2xl shadow-sm p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Ticket className="size-4 text-brand" />
+                <p className="text-sm font-semibold text-foreground">Booking Simulation</p>
+              </div>
+              <button
+                onClick={() => {
+                  setBookingMode((m) => !m);
+                  setCart([]);
+                }}
+                className={cn(
+                  "px-4 h-8 rounded-lg text-sm font-medium border transition cursor-pointer",
+                  bookingMode
+                    ? "bg-brand text-brand-foreground border-brand"
+                    : "bg-card text-muted-foreground border-border hover:text-foreground",
+                )}
+              >
+                {bookingMode ? "Booking Mode: ON" : "Enable Booking Mode"}
+              </button>
+            </div>
+
+            {bookingMode ? (
+              <div className="mt-4 flex flex-wrap items-end gap-4">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Tickets</label>
+                  <div className="inline-flex rounded-lg bg-muted p-1 gap-0.5">
+                    {([1, 2] as const).map((n) => (
+                      <button
+                        key={n}
+                        onClick={() => {
+                          setTicketCount(n);
+                          setCart([]);
+                        }}
+                        className={cn(
+                          "px-4 h-8 text-sm font-medium rounded-md transition cursor-pointer",
+                          ticketCount === n
+                            ? "bg-brand text-brand-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {n === 1 ? "1 ticket" : "2 tickets"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Passenger</label>
+                  <div className="inline-flex rounded-lg bg-muted p-1 gap-0.5">
+                    <button
+                      onClick={() => {
+                        setPassengerGender("female");
+                        setCart([]);
+                      }}
+                      className={cn(
+                        "px-4 h-8 text-sm font-medium rounded-md transition inline-flex items-center gap-1.5 cursor-pointer",
+                        passengerGender === "female"
+                          ? "bg-brand text-brand-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <CircleUser className="size-3.5" /> Female
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPassengerGender("male");
+                        setCart([]);
+                      }}
+                      className={cn(
+                        "px-4 h-8 text-sm font-medium rounded-md transition inline-flex items-center gap-1.5 cursor-pointer",
+                        passengerGender === "male"
+                          ? "bg-brand text-brand-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <User className="size-3.5" /> Male
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button size="sm" className="gap-2 bg-brand text-brand-foreground hover:bg-brand/90" onClick={confirmBooking} disabled={cart.length === 0}>
+                    <TicketCheck className="size-4" /> Confirm Booking
+                  </Button>
+                  <Button size="sm" variant="outline" className="gap-2" onClick={() => setCart([])} disabled={cart.length === 0}>
+                    Clear
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Enable booking mode to simulate passenger bookings. When a passenger books one seat of a
+                double bed / side-by-side pair, the seat beside them is auto-reserved for the same gender only.
+              </p>
+            )}
+
+            {bookingMode && cart.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-xs text-muted-foreground">Cart ({cart.length}/{ticketCount}):</span>
+                {cart.map((id) => {
+                  const s = seats.find((x) => x.id === id)!;
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => handleSeatClick(id)}
+                      className="px-2.5 h-7 rounded-full bg-brand/10 border border-brand/25 text-brand font-semibold text-xs hover:bg-brand/20 cursor-pointer"
+                      title="Remove from cart"
+                    >
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Layout canvas */}
           <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
             {/* Deck tabs + legend */}
@@ -534,8 +836,8 @@ function SeatLayoutsPage() {
                       deck={deck}
                       arrangement={currentLayout.arrangement}
                       statusFilter={statusFilter}
-                      selectedId={selected}
-                      onSelect={setSelected}
+                      selectedIds={highlightedIds}
+                      onSelect={handleSeatClick}
                     />
 
                     <div className="mt-3 text-center text-[9px] uppercase tracking-wider text-muted-foreground">
@@ -632,21 +934,17 @@ function SteeringWheel({ className }: { className?: string }) {
 }
 
 function Legend() {
-  const items: { k: SeatStatus | "selected"; label: string }[] = [
-    { k: "available", label: "Available" },
-    { k: "booked", label: "Booked" },
-    { k: "female", label: "Female Reserved" },
-    { k: "blocked", label: "Blocked" },
-    { k: "selected", label: "Selected" },
-  ];
   return (
     <div className="flex flex-wrap items-center gap-3 text-xs">
-      {items.map((it) => (
+      {LEGEND_ITEMS.map((it) => (
         <span key={it.k} className="flex items-center gap-1.5">
           <span
             className={cn(
               "size-2.5 rounded-full",
-              it.k === "selected" ? "bg-chart-5 ring-2 ring-chart-5/30" : STATUS_META[it.k as SeatStatus].dot,
+              it.k === "selected" && "bg-chart-5 ring-2 ring-chart-5/30",
+              it.k === "maleOnly" && "border-2 border-dashed border-blue-500/60",
+              (it.k === "available" || it.k === "booked" || it.k === "female" || it.k === "blocked") &&
+                STATUS_META[it.k as SeatStatus].dot,
             )}
           />
           <span className="text-muted-foreground">{it.label}</span>
@@ -661,21 +959,22 @@ function SeatGrid({
   deck,
   arrangement,
   statusFilter,
-  selectedId,
+  selectedIds,
   onSelect,
 }: {
   seats: Seat[];
   deck: DeckKey;
   arrangement: SeatArrangement;
   statusFilter: "all" | SeatStatus;
-  selectedId: string | null;
+  selectedIds: string[];
   onSelect: (id: string) => void;
 }) {
   const isTwoTwo = arrangement === "2-2";
   const isDimmed = (seat: Seat) => statusFilter !== "all" && seat.status !== statusFilter;
+  const isSel = (id: string) => selectedIds.includes(id);
 
   if (isTwoTwo) {
-    return <SeaterGrid seats={seats} deck={deck} statusFilter={statusFilter} selectedId={selectedId} onSelect={onSelect} />;
+    return <SeaterGrid seats={seats} deck={deck} statusFilter={statusFilter} selectedIds={selectedIds} onSelect={onSelect} />;
   }
 
   // 2+1: two independent columns so beds / seats always span the same bus height.
@@ -701,7 +1000,7 @@ function SeatGrid({
         {/* Single / bed side */}
         <div className="flex flex-col" style={{ width: SINGLE_W, gap: GRID_GAP }}>
           {singleSeats.map((seat) => {
-            const selected = seat.id === selectedId;
+            const selected = isSel(seat.id);
             if (seat.kind === "sleeper") {
               return <BedCell key={seat.id} seat={seat} selected={selected} dimmed={isDimmed(seat)} onSelect={onSelect} />;
             }
@@ -718,13 +1017,13 @@ function SeatGrid({
             const sleeperPair = row.seats.length === 2 && row.seats[0].kind === "sleeper";
             if (sleeperPair) {
               return (
-                <DoubleBedCell key={row.r} seats={row.seats} selectedId={selectedId} isDimmed={isDimmed} onSelect={onSelect} />
+                <DoubleBedCell key={row.r} seats={row.seats} selectedIds={selectedIds} isDimmed={isDimmed} onSelect={onSelect} />
               );
             }
             return (
               <div key={row.r} className="flex" style={{ gap: GRID_GAP }}>
                 {row.seats.map((seat) => (
-                  <SeatCell key={seat.id} seat={seat} selected={seat.id === selectedId} dimmed={isDimmed(seat)} onSelect={onSelect} />
+                  <SeatCell key={seat.id} seat={seat} selected={isSel(seat.id)} dimmed={isDimmed(seat)} onSelect={onSelect} />
                 ))}
               </div>
             );
@@ -739,17 +1038,18 @@ function SeaterGrid({
   seats,
   deck,
   statusFilter,
-  selectedId,
+  selectedIds,
   onSelect,
 }: {
   seats: Seat[];
   deck: DeckKey;
   statusFilter: "all" | SeatStatus;
-  selectedId: string | null;
+  selectedIds: string[];
   onSelect: (id: string) => void;
 }) {
   const rows = Array.from(new Set(seats.map((s) => s.row))).sort((a, b) => a - b);
   const isDimmed = (seat: Seat) => statusFilter !== "all" && seat.status !== statusFilter;
+  const isSel = (id: string) => selectedIds.includes(id);
 
   return (
     <div className="flex flex-col" style={{ gap: GRID_GAP }}>
@@ -782,7 +1082,7 @@ function SeaterGrid({
               {benchCols.map((c) => {
                 const seat = rowSeats.find((s) => s.col === c);
                 if (!seat) return <div key={c} className="h-9" />;
-                return <SeatCell key={seat.id} seat={seat} selected={seat.id === selectedId} dimmed={isDimmed(seat)} onSelect={onSelect} />;
+                return <SeatCell key={seat.id} seat={seat} selected={isSel(seat.id)} dimmed={isDimmed(seat)} onSelect={onSelect} />;
               })}
             </div>
           );
@@ -794,7 +1094,7 @@ function SeaterGrid({
               if (c === AISLE_COL_22) return <div key={c} />;
               const seat = rowSeats.find((s) => s.col === c);
               if (!seat) return <div key={c} className="h-9" />;
-              return <SeatCell key={seat.id} seat={seat} selected={seat.id === selectedId} dimmed={isDimmed(seat)} onSelect={onSelect} />;
+              return <SeatCell key={seat.id} seat={seat} selected={isSel(seat.id)} dimmed={isDimmed(seat)} onSelect={onSelect} />;
             })}
           </div>
         );
@@ -814,6 +1114,15 @@ function WashroomCell() {
   );
 }
 
+// Marks a seat that is only for a specific gender (male-only dashed / female-reserved)
+function GenderMark({ seat }: { seat: Seat }) {
+  const female = seat.status === "female" || seat.reservedFor === "female";
+  const male = seat.status === "available" && seat.reservedFor === "male";
+  if (female) return <Venus className="size-3 opacity-80" />;
+  if (male) return <Mars className="size-3 opacity-80" />;
+  return null;
+}
+
 // Rectangular bunk for a single sleeper berth - uniform size on every bus/deck
 function BedCell({
   seat,
@@ -830,20 +1139,23 @@ function BedCell({
   return (
     <button
       onClick={() => onSelect(seat.id)}
-      title={`${seat.label} · ${meta.label} · ₹${seat.price}`}
+      title={`${seat.label} · ${meta.label}${seat.reservedFor ? ` · ${seat.reservedFor === "male" ? "Male" : "Female"} only` : ""} · ₹${seat.price}`}
       className={cn(
         "group relative w-full rounded-lg border-2 px-1 text-[11px] font-semibold transition-all duration-150",
         "flex flex-col items-center justify-center gap-1",
         "hover:-translate-y-0.5 hover:shadow-md",
-        meta.seat,
+        heldSeatStyle(seat, meta),
         selected && meta.selected,
         dimmed && "opacity-25",
       )}
       style={{ height: BED_H }}
     >
-      {/* Pillow */}
+            {/* Pillow */}
       <span className="h-1.5 w-4/5 rounded-full bg-current opacity-25" />
-      <span className="leading-none">{seat.label}</span>
+      <span className="leading-none flex items-center gap-1">
+        {seat.label}
+        <GenderMark seat={seat} />
+      </span>
       {/* Foot end */}
       <span className="h-1.5 w-4/5 rounded-sm bg-current opacity-10" />
 
@@ -856,38 +1168,41 @@ function BedCell({
 }
 
 // One wide rectangle representing a double bed, split into two clickable berths -
-// same height as every other bed in the application
+// each berth carries the exact same border styling as a single bed
 function DoubleBedCell({
   seats,
-  selectedId,
+  selectedIds,
   isDimmed,
   onSelect,
 }: {
   seats: Seat[];
-  selectedId: string | null;
+  selectedIds: string[];
   isDimmed: (seat: Seat) => boolean;
   onSelect: (id: string) => void;
 }) {
   return (
-    <div className="flex rounded-lg overflow-hidden border-2" style={{ height: BED_H }}>
-      {seats.map((seat, i) => {
+    <div className="flex" style={{ height: BED_H, gap: GRID_GAP }}>
+      {seats.map((seat) => {
         const meta = STATUS_META[seat.status];
         return (
           <button
             key={seat.id}
             onClick={() => onSelect(seat.id)}
-            title={`${seat.label} · ${meta.label} · ₹${seat.price}`}
+            title={`${seat.label} · ${meta.label}${seat.reservedFor ? ` · ${seat.reservedFor === "male" ? "Male" : "Female"} only` : ""} · ₹${seat.price}`}
             className={cn(
               "group relative flex-1 flex flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-all duration-150",
-              i > 0 && "border-l-2 border-border/60",
+              "rounded-lg border-2",
               "hover:-translate-y-0.5 hover:shadow-md",
-              meta.seat,
-              seat.id === selectedId && meta.selected,
+              heldSeatStyle(seat, meta),
+              selectedIds.includes(seat.id) && meta.selected,
               isDimmed(seat) && "opacity-25",
             )}
           >
-            <span className="h-1.5 w-4/5 rounded-full bg-current opacity-25" />
-            <span className="leading-none">{seat.label}</span>
+                        <span className="h-1.5 w-4/5 rounded-full bg-current opacity-25" />
+            <span className="leading-none flex items-center gap-1">
+              {seat.label}
+              <GenderMark seat={seat} />
+            </span>
             <span className="h-1.5 w-4/5 rounded-sm bg-current opacity-10" />
           </button>
         );
@@ -911,21 +1226,24 @@ function SeatCell({
   return (
     <button
       onClick={() => onSelect(seat.id)}
-      title={`${seat.label} · ${meta.label} · ₹${seat.price}`}
+      title={`${seat.label} · ${meta.label}${seat.reservedFor ? ` · ${seat.reservedFor === "male" ? "Male" : "Female"} only` : ""} · ₹${seat.price}`}
       className={cn(
         "group relative h-9 w-full flex-1 rounded-t-xl rounded-b-md border-2 px-0.5 text-[11px] font-semibold transition-all duration-150",
         "flex items-center justify-center gap-0.5 cursor-pointer",
         "shadow-[inset_0_-3px_0_rgba(0,0,0,0.07)] hover:-translate-y-0.5 hover:shadow-md",
-        meta.seat,
+        heldSeatStyle(seat, meta),
         selected && meta.selected,
         dimmed && "opacity-25",
       )}
     >
-      {/* Armrests */}
+            {/* Armrests */}
       <span className="pointer-events-none absolute -left-1 top-2 h-4 w-1 rounded-full bg-current opacity-30" />
       <span className="pointer-events-none absolute -right-1 top-2 h-4 w-1 rounded-full bg-current opacity-30" />
 
-      <span className="leading-none">{seat.label}</span>
+      <span className="leading-none flex items-center gap-1">
+        {seat.label}
+        <GenderMark seat={seat} />
+      </span>
       {seat.status === "booked" && <User className="size-2.5 opacity-80" />}
       {seat.status === "female" && <CircleUser className="size-2.5 opacity-80" />}
       {seat.status === "blocked" && <X className="size-2.5 opacity-70" />}
@@ -1023,8 +1341,30 @@ function SeatDetailsCard({
             }
           />
 
-          <Row label="Gender Restriction" value={seat.status === "female" ? "Female Only" : "None"} />
-          <Row label="Availability" value={seat.status === "available" ? "Open" : seat.status === "blocked" ? "Unavailable" : "Reserved"} />
+          <Row
+            label="Gender Restriction"
+            value={
+              seat.status === "female" || seat.reservedFor === "female"
+                ? "Female Only"
+                : seat.reservedFor === "male"
+                  ? "Male Only"
+                  : "None"
+            }
+          />
+          <Row
+            label="Availability"
+            value={
+              seat.reservedFor === "male"
+                ? "Reserved for male passenger"
+                : seat.reservedFor === "female"
+                  ? "Reserved for female passenger"
+                  : seat.status === "available"
+                    ? "Open"
+                    : seat.status === "blocked"
+                      ? "Unavailable"
+                      : "Reserved"
+            }
+          />
           {seat.passenger && <Row label="Passenger Name" value={seat.passenger} />}
           {seat.bookingId && <Row label="Booking ID" value={seat.bookingId} />}
           {seat.bookingDate && <Row label="Booking Date" value={seat.bookingDate} />}
