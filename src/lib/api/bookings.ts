@@ -36,6 +36,41 @@ export const bookingsKey = ["bookings"] as const;
 
 export const listBookings = () => api<{ items: OwnerBooking[] }>("/bookings").then((r) => r.items);
 
+export const ID_PROOFS = [
+  { value: "AADHAAR", label: "Aadhaar Card" },
+  { value: "VOTER_ID", label: "Voter ID" },
+  { value: "DRIVING_LICENCE", label: "Driving Licence" },
+  { value: "PAN", label: "PAN Card" },
+  { value: "PASSPORT", label: "Passport" },
+] as const;
+
+/** A ticket the owner sells at the counter. The fare comes from the seat, never from here. */
+export interface NewBooking {
+  tripId: string;
+  source: "COUNTER";
+  boardingPoint: string;
+  droppingPoint: string;
+  paymentMode: "CASH" | "UPI";
+  passengers: {
+    seatId: string;
+    name: string;
+    age: number;
+    gender: "MALE" | "FEMALE" | "OTHER";
+    phone: string;
+    idProofType: (typeof ID_PROOFS)[number]["value"];
+    idProofNumber: string;
+  }[];
+}
+
+export const createBooking = (body: NewBooking) =>
+  api<{ pnr: string; totalFare: string; bookings: { id: string; seatNumber: string }[] }>(
+    "/bookings",
+    {
+      method: "POST",
+      body,
+    },
+  );
+
 export const cancelBooking = (id: string) =>
   api<{ id: string; status: string }>(`/bookings/${id}/cancel`, { method: "POST" });
 

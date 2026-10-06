@@ -146,6 +146,8 @@ export interface TripSeat {
   /** Decimal string. */
   fare: string;
   status: "AVAILABLE" | "HELD" | "BOOKED" | "BLOCKED";
+  /** A free seat beside a booked one is kept for a passenger of the same gender. */
+  reservedFor: "MALE" | "FEMALE" | null;
   booking: {
     id: string;
     pnr: string;

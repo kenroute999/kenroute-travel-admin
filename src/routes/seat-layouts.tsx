@@ -7,6 +7,8 @@ import {
   Ban,
   CheckCircle2,
   CircleUser,
+  Mars,
+  Venus,
   Lock,
   Maximize2,
   RefreshCw,
@@ -73,6 +75,8 @@ interface Seat {
   kind: SeatKind;
   status: SeatStatus;
   price: number;
+  /** Free, but kept for this gender because the seat beside it is taken. */
+  reservedFor?: "male" | "female";
   passenger?: string;
   /** PNR of the ticket holding the seat. */
   bookingId?: string;
@@ -130,6 +134,9 @@ function toSeat(s: TripSeat): Seat {
     kind: s.seatType.includes("SLEEPER") ? "sleeper" : "seater",
     status,
     price: Number(s.fare),
+    ...(s.reservedFor && {
+      reservedFor: s.reservedFor === "FEMALE" ? ("female" as const) : ("male" as const),
+    }),
     gender:
       b?.passenger?.gender === "FEMALE"
         ? "Female"
@@ -163,10 +170,10 @@ const STATUS_META: Record<
     selected: "ring-2 ring-chart-5 ring-offset-2 ring-offset-background",
   },
   booked: {
-    label: "Booked",
-    dot: "bg-danger",
-    chip: "bg-danger/15 text-danger border-danger/25",
-    seat: "bg-gradient-to-b from-danger/25 to-danger/15 border-danger/40 text-danger hover:from-danger/35 hover:to-danger/20",
+    label: "Booked (Male)",
+    dot: "bg-blue-500",
+    chip: "bg-blue-100 text-blue-700 border-blue-200",
+    seat: "bg-gradient-to-b from-blue-500/20 to-blue-400/10 border-blue-500/40 text-blue-600 hover:from-blue-500/30 hover:to-blue-400/15",
     selected: "ring-2 ring-chart-5 ring-offset-2 ring-offset-background",
   },
   female: {
@@ -184,6 +191,27 @@ const STATUS_META: Record<
     selected: "ring-2 ring-chart-5 ring-offset-2 ring-offset-background",
   },
 };
+
+// A free seat kept for one gender (the seat beside it is taken) gets a dashed border in that colour.
+const MALE_ONLY_SEAT =
+  "bg-gradient-to-b from-blue-500/10 to-blue-400/5 border-dashed border-blue-400/60 text-blue-500 hover:from-blue-500/15";
+const FEMALE_ONLY_SEAT =
+  "bg-gradient-to-b from-pink-200/40 to-pink-100/30 border-dashed border-pink-300/70 text-pink-500 hover:from-pink-300/50";
+function seatStyle(seat: Seat): string {
+  if (seat.reservedFor === "male") return MALE_ONLY_SEAT;
+  if (seat.reservedFor === "female") return FEMALE_ONLY_SEAT;
+  return STATUS_META[seat.status].seat;
+}
+const seatHint = (seat: Seat) =>
+  `${seat.label} · ${STATUS_META[seat.status].label}${seat.reservedFor ? ` · ${seat.reservedFor === "male" ? "Male" : "Female"} only` : ""} · ₹${seat.price}`;
+
+function GenderMark({ seat }: { seat: Seat }) {
+  if (seat.status === "female" || seat.reservedFor === "female")
+    return <Venus className="size-3 opacity-80" />;
+  if (seat.status === "booked" || seat.reservedFor === "male")
+    return <Mars className="size-3 opacity-80" />;
+  return null;
+}
 
 // ---------- Page ----------
 function SeatLayoutsPage() {
@@ -650,10 +678,12 @@ function SteeringWheel({ className }: { className?: string }) {
 }
 
 function Legend() {
-  const items: { k: SeatStatus | "selected"; label: string }[] = [
+  const items: { k: SeatStatus | "selected" | "maleOnly" | "femaleOnly"; label: string }[] = [
     { k: "available", label: "Available" },
-    { k: "booked", label: "Booked" },
-    { k: "female", label: "Female Reserved" },
+    { k: "booked", label: "Booked (Male)" },
+    { k: "female", label: "Booked (Female)" },
+    { k: "maleOnly", label: "Male Only" },
+    { k: "femaleOnly", label: "Female Only" },
     { k: "blocked", label: "Blocked" },
     { k: "selected", label: "Selected" },
   ];
@@ -666,7 +696,11 @@ function Legend() {
               "size-2.5 rounded-full",
               it.k === "selected"
                 ? "bg-chart-5 ring-2 ring-chart-5/30"
-                : STATUS_META[it.k as SeatStatus].dot,
+                : it.k === "maleOnly"
+                  ? "border-2 border-dashed border-blue-500/70"
+                  : it.k === "femaleOnly"
+                    ? "border-2 border-dashed border-pink-400"
+                    : STATUS_META[it.k].dot,
             )}
           />
           <span className="text-muted-foreground">{it.label}</span>
@@ -916,12 +950,12 @@ function BedCell({
   return (
     <button
       onClick={() => onSelect(seat.id)}
-      title={`${seat.label} · ${meta.label} · ₹${seat.price}`}
+      title={seatHint(seat)}
       className={cn(
         "group relative w-full rounded-lg border-2 px-1 text-[11px] font-semibold transition-all duration-150",
         "flex flex-col items-center justify-center gap-1",
         "hover:-translate-y-0.5 hover:shadow-md",
-        meta.seat,
+        seatStyle(seat),
         selected && meta.selected,
         dimmed && "opacity-25",
       )}
@@ -929,13 +963,16 @@ function BedCell({
     >
       {/* Pillow */}
       <span className="h-1.5 w-4/5 rounded-full bg-current opacity-25" />
-      <span className="leading-none">{seat.label}</span>
+      <span className="leading-none flex items-center gap-1">
+        {seat.label}
+        <GenderMark seat={seat} />
+      </span>
       {/* Foot end */}
       <span className="h-1.5 w-4/5 rounded-sm bg-current opacity-10" />
 
       {/* Tooltip */}
       <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-navy text-navy-foreground text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition shadow-lg z-10">
-        {seat.label} · {meta.label} · ₹{seat.price}
+        {seatHint(seat)}
       </span>
     </button>
   );
@@ -962,18 +999,21 @@ function DoubleBedCell({
           <button
             key={seat.id}
             onClick={() => onSelect(seat.id)}
-            title={`${seat.label} · ${meta.label} · ₹${seat.price}`}
+            title={seatHint(seat)}
             className={cn(
               "group relative flex-1 flex flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-all duration-150",
               i > 0 && "border-l-2 border-border/60",
               "hover:-translate-y-0.5 hover:shadow-md",
-              meta.seat,
+              seatStyle(seat),
               seat.id === selectedId && meta.selected,
               isDimmed(seat) && "opacity-25",
             )}
           >
             <span className="h-1.5 w-4/5 rounded-full bg-current opacity-25" />
-            <span className="leading-none">{seat.label}</span>
+            <span className="leading-none flex items-center gap-1">
+              {seat.label}
+              <GenderMark seat={seat} />
+            </span>
             <span className="h-1.5 w-4/5 rounded-sm bg-current opacity-10" />
           </button>
         );
@@ -997,12 +1037,12 @@ function SeatCell({
   return (
     <button
       onClick={() => onSelect(seat.id)}
-      title={`${seat.label} · ${meta.label} · ₹${seat.price}`}
+      title={seatHint(seat)}
       className={cn(
         "group relative h-9 w-full flex-1 rounded-t-xl rounded-b-md border-2 px-0.5 text-[11px] font-semibold transition-all duration-150",
         "flex items-center justify-center gap-0.5 cursor-pointer",
         "shadow-[inset_0_-3px_0_rgba(0,0,0,0.07)] hover:-translate-y-0.5 hover:shadow-md",
-        meta.seat,
+        seatStyle(seat),
         selected && meta.selected,
         dimmed && "opacity-25",
       )}
@@ -1011,14 +1051,17 @@ function SeatCell({
       <span className="pointer-events-none absolute -left-1 top-2 h-4 w-1 rounded-full bg-current opacity-30" />
       <span className="pointer-events-none absolute -right-1 top-2 h-4 w-1 rounded-full bg-current opacity-30" />
 
-      <span className="leading-none">{seat.label}</span>
+      <span className="leading-none flex items-center gap-1">
+        {seat.label}
+        <GenderMark seat={seat} />
+      </span>
       {seat.status === "booked" && <User className="size-2.5 opacity-80" />}
       {seat.status === "female" && <CircleUser className="size-2.5 opacity-80" />}
       {seat.status === "blocked" && <X className="size-2.5 opacity-70" />}
 
       {/* Tooltip */}
       <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-navy text-navy-foreground text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition shadow-lg z-10">
-        {seat.label} · {meta.label} · ₹{seat.price}
+        {seatHint(seat)}
       </span>
     </button>
   );
@@ -1141,6 +1184,16 @@ function SeatDetailsCard({
             }
           />
 
+          <Row
+            label="Gender Restriction"
+            value={
+              seat.reservedFor === "female"
+                ? "Female Only"
+                : seat.reservedFor === "male"
+                  ? "Male Only"
+                  : "None"
+            }
+          />
           <Row
             label="Availability"
             value={
