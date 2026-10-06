@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { format } from "date-fns";
 import {
   ArrowRight,
   BusFront,
+  CalendarIcon,
   ChevronLeft,
   ChevronRight,
   Eye,
@@ -16,6 +18,7 @@ import {
   Search,
   Trash2,
   Trophy,
+  X,
   Zap,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -29,8 +32,10 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -40,6 +45,13 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import {
+  busFleet,
+  busByNo,
+  fareFieldsForType,
+  type BusType,
+  type FareKey,
+} from "@/lib/buses";
 
 export const Route = createFileRoute("/routes")({
   head: () => ({
@@ -57,6 +69,26 @@ export const Route = createFileRoute("/routes")({
 
 type Status = "Active" | "Inactive" | "Maintenance";
 
+const parseDay = (iso: string) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return new Date();
+  return new Date(y, m - 1, d);
+};
+
+const formatDay = (iso: string) => (iso ? format(parseDay(iso), "EEE, dd MMM") : "—");
+
+const formatTime = (t: string) => {
+  if (!t) return "—";
+  const m = t.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return t;
+  const h = Number(m[1]);
+  const suffix = h >= 12 ? "PM" : "AM";
+  return `${((h + 11) % 12) + 1}:${m[2]} ${suffix}`;
+};
+
+const isNextDay = (r: RouteRow) =>
+  Boolean(r.depDate && r.arrDate) && r.arrDate > r.depDate;
+
 interface RouteRow {
   id: string;
   src: string;
@@ -64,12 +96,29 @@ interface RouteRow {
   busNo: string;
   busName: string;
   busColor: string;
-  busType: "Sleeper" | "Seater";
+  busType: BusType;
   dep: string;
+  depDate: string;
   arr: string;
+  arrDate: string;
   boarding: string[];
-  fare: number;
+  dropping: string[];
+  fares: Partial<Record<FareKey, number>>;
   status: Status;
+}
+
+function collect(fd: FormData, name: string): string[] {
+  return fd
+    .getAll(name)
+    .map((v) => String(v).trim())
+    .filter(Boolean);
+}
+
+function defaultFares(type: BusType): Partial<Record<FareKey, number>> {
+  const base: Record<FareKey, number> = { seater: 850, singleBed: 1400, doubleBed: 900 };
+  return Object.fromEntries(
+    fareFieldsForType[type].map((f) => [f.key, base[f.key]]),
+  ) as Partial<Record<FareKey, number>>;
 }
 
 const initialRows: RouteRow[] = [
@@ -80,11 +129,14 @@ const initialRows: RouteRow[] = [
     busNo: "TS 09 AB 1234",
     busName: "Volvo B11R",
     busColor: "text-emerald-500",
-    busType: "Sleeper",
+    busType: "Sleeper (2+1)",
     dep: "08:00 PM",
+    depDate: "2026-10-06",
     arr: "05:30 AM",
+    arrDate: "2026-10-07",
     boarding: ["Ameerpet", "LB Nagar", "Kothapet", "Mehdipatnam", "Shamshabad"],
-    fare: 1200,
+    dropping: ["Yelahanka", "Hebbal", "Majestic", "Shivajinagar", "Silk Board", "Electronic City", "Bangalore"],
+    fares: { singleBed: 1450, doubleBed: 950 },
     status: "Active",
   },
   {
@@ -94,67 +146,82 @@ const initialRows: RouteRow[] = [
     busNo: "TS 09 CD 5678",
     busName: "Scania Metrolink",
     busColor: "text-slate-700",
-    busType: "Seater",
+    busType: "Seater (2+2)",
     dep: "06:00 AM",
+    depDate: "2026-10-07",
     arr: "11:15 AM",
+    arrDate: "2026-10-07",
     boarding: ["Ameerpet", "Miyapur", "JNTU", "Kukatpally", "Uppal", "LB Nagar"],
-    fare: 850,
+    dropping: ["Suryapet", "Khammam", "Gollapudi", "Benz Circle", "Governorpet", "Vijayawada"],
+    fares: { seater: 850 },
     status: "Active",
   },
   {
-    id: "RTE-1003",
+id: "RTE-1003",
     src: "Bangalore",
     dst: "Chennai",
-    busNo: "KA 01 AB 2222",
+    busNo: "TS 09 EF 9101",
     busName: "Volvo B11R",
-    busColor: "text-emerald-500",
-    busType: "Sleeper",
+    busColor: "text-amber-500",
+    busType: "Sleeper (2+1)",
     dep: "07:00 PM",
+    depDate: "2026-10-08",
     arr: "02:15 AM",
+    arrDate: "2026-10-09",
     boarding: ["Silk Board", "Marathahalli", "Hosur Road", "Electronic City", "Madiwala"],
-    fare: 1100,
+    dropping: ["Hosur", "Krishnagiri", "Vellore", "Sriperumbudur", "Tambaram", "Koyambedu", "Chennai"],
+    fares: { singleBed: 1350, doubleBed: 900 },
     status: "Active",
   },
   {
     id: "RTE-1004",
     src: "Hyderabad",
     dst: "Chennai",
-    busNo: "TS 09 EF 9101",
+    busNo: "TS 09 GH 1122",
     busName: "Benz Dreamz",
-    busColor: "text-amber-500",
-    busType: "Sleeper",
+    busColor: "text-sky-600",
+    busType: "Seater/Sleeper (2+1)",
     dep: "09:00 PM",
+    depDate: "2026-10-06",
     arr: "07:30 AM",
+    arrDate: "2026-10-07",
     boarding: ["Ameerpet", "LB Nagar", "Sagar Road", "Dilsukhnagar", "Hayathnagar", "Uppal", "Kothapet"],
-    fare: 1000,
+    dropping: ["Ongole", "Nellore", "Gudur", "Sriperumbudur", "Tambaram", "Koyambedu", "Chennai"],
+    fares: { seater: 900, singleBed: 1400, doubleBed: 950 },
     status: "Active",
   },
   {
     id: "RTE-1005",
     src: "Visakhapatnam",
     dst: "Hyderabad",
-    busNo: "AP 39 GH 1122",
+    busNo: "TS 09 IJ 3344",
     busName: "Volvo B8R",
-    busColor: "text-sky-600",
-    busType: "Seater",
+    busColor: "text-rose-500",
+    busType: "Seater (2+2)",
     dep: "08:30 PM",
+    depDate: "2026-10-07",
     arr: "07:50 AM",
+    arrDate: "2026-10-08",
     boarding: ["MVP Colony", "Maddilapalem", "Anakapalle", "Tuni", "Rajahmundry", "Vijayawada"],
-    fare: 950,
+    dropping: ["Rajahmundry", "Eluru", "Vijayawada", "Khammam", "Suryapet", "LB Nagar", "Ameerpet"],
+    fares: { seater: 950 },
     status: "Active",
   },
   {
     id: "RTE-1006",
     src: "Hyderabad",
     dst: "Tirupati",
-    busNo: "TS 09 IJ 3344",
+    busNo: "TS 09 GH 1122",
     busName: "Benz AC Sleeper",
-    busColor: "text-rose-500",
-    busType: "Sleeper",
+    busColor: "text-sky-600",
+    busType: "Seater/Sleeper (2+1)",
     dep: "06:30 AM",
+    depDate: "2026-10-09",
     arr: "12:45 PM",
-    boarding: ["Ameerpet", "Kukatpally", "Yadadri", "Kurnool", "Chittoor"],
-    fare: 900,
+    arrDate: "2026-10-09",
+    boarding: ["Ameerpet", "Kukatpally", "LB Nagar", "Dilsukhnagar", "Kothapet"],
+    dropping: ["Kurnool", "Gooty", "Anantapur", "Madanapalle", "Renigunta", "Tirupati"],
+    fares: { seater: 800, singleBed: 1250, doubleBed: 850 },
     status: "Inactive",
   },
 ];
@@ -213,6 +280,7 @@ function RoutesPage() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [openAdd, setOpenAdd] = useState(false);
+  const [assignedBusNo, setAssignedBusNo] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -319,8 +387,9 @@ function RoutesPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="Sleeper">Sleeper</SelectItem>
-                <SelectItem value="Seater">Seater</SelectItem>
+                {Object.keys(fareFieldsForType).map((t) => (
+                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -339,7 +408,7 @@ function RoutesPage() {
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[1100px]">
+          <table className="w-full text-sm min-w-[1250px]">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground bg-muted/40">
                 <th className="px-6 py-3.5 font-semibold">Route ID</th>
@@ -348,6 +417,7 @@ function RoutesPage() {
                 <th className="px-6 py-3.5 font-semibold">Departure</th>
                 <th className="px-6 py-3.5 font-semibold">Arrival</th>
                 <th className="px-6 py-3.5 font-semibold">Boarding Points</th>
+                <th className="px-6 py-3.5 font-semibold">Dropping Points</th>
                 <th className="px-6 py-3.5 font-semibold">Fare</th>
                 <th className="px-6 py-3.5 font-semibold">Status</th>
                 <th className="px-6 py-3.5 font-semibold text-right">Actions</th>
@@ -357,7 +427,7 @@ function RoutesPage() {
               {loading
                 ? Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i} className="border-t border-border">
-                      {Array.from({ length: 9 }).map((__, j) => (
+                      {Array.from({ length: 10 }).map((__, j) => (
                         <td key={j} className="px-6 py-4">
                           <Skeleton className="h-5 w-full max-w-[140px]" />
                         </td>
@@ -388,8 +458,23 @@ function RoutesPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 font-medium text-foreground whitespace-nowrap">{r.dep}</td>
-                      <td className="px-6 py-4 font-medium text-foreground whitespace-nowrap">{r.arr}</td>
+                      <td className="px-6 py-4 font-medium text-foreground whitespace-nowrap">
+                        {formatTime(r.dep)}
+                        <div className="text-xs font-normal text-muted-foreground mt-0.5">
+                          {formatDay(r.depDate)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 font-medium text-foreground whitespace-nowrap">
+                        {formatTime(r.arr)}
+                        <div className="text-xs font-normal text-muted-foreground mt-0.5 flex items-center gap-1.5">
+                          {formatDay(r.arrDate)}
+                          {isNextDay(r) && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand/10 text-brand">
+                              +1 day
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-6 py-4">
                         <div className="text-xs">
                           <div className="text-foreground">
@@ -403,9 +488,31 @@ function RoutesPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="font-semibold text-foreground">
-                          ₹{r.fare.toLocaleString("en-IN")}
-                        </span>
+                        <div className="text-xs">
+                          <div className="text-foreground">
+                            {r.dropping.slice(0, 2).join(", ")}
+                          </div>
+                          {r.dropping.length > 2 && (
+                            <button className="text-brand hover:underline font-medium mt-0.5">
+                              +{r.dropping.length - 2} more
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="space-y-1">
+                          {fareFieldsForType[r.busType].map((f) => (
+                            <div
+                              key={f.key}
+                              className="flex items-center justify-between gap-3 text-xs"
+                            >
+                              <span className="text-muted-foreground">{f.label}</span>
+                              <span className="font-semibold text-foreground">
+                                ₹{(r.fares[f.key] ?? 0).toLocaleString("en-IN")}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <StatusBadge status={r.status} />
@@ -436,7 +543,7 @@ function RoutesPage() {
                   ))}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-6 py-16 text-center text-muted-foreground">
+                  <td colSpan={10} className="px-6 py-16 text-center text-muted-foreground">
                     <RouteIcon className="size-10 mx-auto mb-2 opacity-40" />
                     No routes match your filters.
                   </td>
@@ -500,21 +607,29 @@ function RoutesPage() {
               const fd = new FormData(e.currentTarget);
               const src = String(fd.get("src") || "");
               const dst = String(fd.get("dst") || "");
+              const busNo = String(fd.get("bus") || "TBD");
+              const bus = busByNo(busNo);
+              const busType = bus?.type ?? "Seater (2+2)";
+              const fares: Partial<Record<FareKey, number>> = {};
+              for (const f of fareFieldsForType[busType]) {
+                const v = Number(fd.get(`fare_${f.key}`) || 0);
+                if (v > 0) fares[f.key] = v;
+              }
               handleSave({
                 id: `RTE-${1000 + rows.length + 1}`,
                 src,
                 dst,
-                busNo: String(fd.get("bus") || "TBD"),
-                busName: "Assigned Bus",
-                busColor: "text-brand",
-                busType: "Sleeper",
+                busNo,
+                busName: bus?.name ?? "Assigned Bus",
+                busColor: bus?.color ?? "text-brand",
+                busType,
                 dep: String(fd.get("dep") || "—"),
+                depDate: String(fd.get("depDate") || ""),
                 arr: String(fd.get("arr") || "—"),
-                boarding: String(fd.get("boarding") || "")
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean),
-                fare: Number(fd.get("fare") || 0),
+                arrDate: String(fd.get("arrDate") || ""),
+                boarding: collect(fd, "boarding"),
+                dropping: collect(fd, "dropping"),
+                fares,
                 status: (fd.get("status") as Status) || "Active",
               });
             }}
@@ -547,35 +662,19 @@ function RoutesPage() {
             </div>
 
             <Field label="Boarding Points" required>
-              <Input
-                name="boarding"
-                placeholder="Add boarding points"
-                className="h-11 rounded-xl"
-              />
-              <p className="text-xs text-muted-foreground mt-1.5">
-                Add multiple points separated by comma
-              </p>
+              <PointsInput name="boarding" placeholder="e.g. Ameerpet" />
             </Field>
 
             <Field label="Dropping Points" required>
-              <Input
-                name="dropping"
-                placeholder="Add dropping points"
-                className="h-11 rounded-xl"
-              />
-              <p className="text-xs text-muted-foreground mt-1.5">
-                Add multiple points separated by comma
-              </p>
+              <PointsInput name="dropping" placeholder="e.g. Gachibowli" />
             </Field>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Departure Time" required>
-                <Input name="dep" type="time" className="h-11 rounded-xl" />
-              </Field>
-              <Field label="Arrival Time" required>
-                <Input name="arr" type="time" className="h-11 rounded-xl" />
-              </Field>
-            </div>
+            <DateTimeField label="Departure" dateName="depDate" timeName="dep" />
+            <DateTimeField label="Arrival" dateName="arrDate" timeName="arr" />
+            <p className="text-xs text-muted-foreground">
+              For overnight journeys pick the arrival date on day 2 — it is marked
+              with a +1 day badge in the table.
+            </p>
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="Distance (km)">
@@ -587,29 +686,39 @@ function RoutesPage() {
             </div>
 
             <Field label="Assign Bus" required>
-              <Select name="bus">
+              <Select
+                value={assignedBusNo}
+                onValueChange={(v) => setAssignedBusNo(v)}
+              >
                 <SelectTrigger className="h-11 rounded-xl">
                   <SelectValue placeholder="Select bus" />
                 </SelectTrigger>
                 <SelectContent>
-                  {initialRows.map((r) => (
-                    <SelectItem key={r.busNo} value={r.busNo}>
-                      {r.busNo} · {r.busName}
+                  {busFleet.map((b) => (
+                    <SelectItem key={b.no} value={b.no}>
+                      {b.no} · {b.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <input type="hidden" name="bus" value={assignedBusNo} />
+              {assignedBusNo && busByNo(assignedBusNo) && (
+                <p className="text-xs text-brand mt-1.5">
+                  {busByNo(assignedBusNo)!.type} ·{" "}
+                  {busByNo(assignedBusNo)!.seats} seats
+                </p>
+              )}
             </Field>
-
-            <Field label="Ticket Fare (₹)" required>
-              <Input
-                name="fare"
-                type="number"
-                min={0}
-                placeholder="e.g. 1200"
-                className="h-11 rounded-xl"
-              />
-            </Field>
+            {assignedBusNo && busByNo(assignedBusNo) && (
+              <FareSection type={busByNo(assignedBusNo)!.type} />
+            )}
+            {!assignedBusNo && (
+              <Field label="Ticket Fare (₹)">
+                <p className="text-sm text-muted-foreground">
+                  Select an assigned bus above to configure the fares for its seat types.
+                </p>
+              </Field>
+            )}
 
             <Field label="Route Status" required>
               <Select name="status" defaultValue="Active">
@@ -658,6 +767,171 @@ function RoutesPage() {
         </SheetContent>
       </Sheet>
     </>
+  );
+}
+
+function FareSection({ type }: { type: BusType }) {
+  const fields = fareFieldsForType[type];
+  return (
+    <Field label={`Ticket Fare (₹) — ${type}`} required>
+      <div className="space-y-3">
+        {fields.map((f) => (
+          <Field key={f.key} label={f.label} required>
+            <Input
+              name={`fare_${f.key}`}
+              type="number"
+              min={0}
+              placeholder={`e.g. ${f.key === "doubleBed" ? "900" : f.key === "singleBed" ? "1400" : "850"}`}
+              className="h-11 rounded-xl"
+            />
+          </Field>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Fares are set per seat type of the assigned bus.
+      </p>
+    </Field>
+  );
+}
+
+function DateTimeField({
+  label,
+  dateName,
+  timeName,
+}: {
+  label: string;
+  dateName: string;
+  timeName: string;
+}) {
+  const [date, setDate] = useState<Date>(new Date());
+  const [time, setTime] = useState("");
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Field label={label} required>
+      <div className="flex gap-2">
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 rounded-xl flex-1 justify-start font-normal border-border min-w-0"
+            >
+              <CalendarIcon className="size-4 shrink-0 text-muted-foreground" />
+              <span className="truncate">{format(date, "dd MMM yyyy")}</span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-auto p-0 pointer-events-auto">
+            <Calendar
+              mode="single"
+              selected={date}
+              onSelect={(d) => {
+                if (d) setDate(d);
+                setOpen(false);
+              }}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
+        <Input
+          name={timeName}
+          type="time"
+          value={time}
+          onChange={(e) => setTime(e.target.value)}
+          required
+          className="h-11 rounded-xl w-[118px] shrink-0"
+        />
+      </div>
+      <input type="hidden" name={dateName} value={format(date, "yyyy-MM-dd")} />
+      <p className="text-xs text-muted-foreground">{format(date, "EEEE, dd MMMM")}</p>
+    </Field>
+  );
+}
+
+function PointsInput({
+  name,
+  placeholder,
+}: {
+  name: string;
+  placeholder: string;
+}) {
+  const [points, setPoints] = useState<string[]>([""]);
+  const refs = useRef<Array<HTMLInputElement | null>>([]);
+
+  const add = () => {
+    setPoints((p) => [...p, ""]);
+  };
+
+  const remove = (i: number) => {
+    setPoints((p) => (p.length === 1 ? [""] : p.filter((_, idx) => idx !== i)));
+  };
+
+  const focusNew = (i: number) => {
+    requestAnimationFrame(() => refs.current[i]?.focus());
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, i: number) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (i === points.length - 1) add();
+      focusNew(i + 1);
+    }
+    if (e.key === "Backspace" && points[i] === "" && points.length > 1) {
+      e.preventDefault();
+      remove(i);
+      focusNew(i - 1);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      {points.map((p, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Input
+            ref={(el) => {
+              refs.current[i] = el;
+            }}
+            name={name}
+            value={p}
+            required
+            onChange={(e) => {
+              const v = e.target.value;
+              setPoints((prev) =>
+                prev.map((item, idx) => (idx === i ? v : item)),
+              );
+            }}
+            onKeyDown={(e) => onKeyDown(e, i)}
+            placeholder={i === 0 ? placeholder : "Add another point"}
+            className="h-11 rounded-xl"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            aria-label="Remove point"
+            disabled={points.length === 1}
+            onClick={() => remove(i)}
+            className="size-11 shrink-0 rounded-xl border-border"
+          >
+            <X className="size-4 text-muted-foreground" />
+          </Button>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => {
+          add();
+          focusNew(points.length);
+        }}
+        className="w-full h-10 rounded-xl border-dashed border-border text-muted-foreground hover:text-brand hover:border-brand/40"
+      >
+        <Plus className="size-4" />
+        Add Point
+      </Button>
+      <p className="text-xs text-muted-foreground">
+        Press Enter or the + button to add another point.
+      </p>
+    </div>
   );
 }
 

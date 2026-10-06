@@ -37,6 +37,13 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import {
+  busFleet,
+  type Bus as BusRow,
+  type BusType,
+  type ACType,
+  type BusStatus as Status,
+} from "@/lib/buses";
 
 export const Route = createFileRoute("/buses")({
   head: () => ({
@@ -50,28 +57,6 @@ export const Route = createFileRoute("/buses")({
   }),
   component: BusesPage,
 });
-
-type BusType = "Sleeper (2+1)" | "Seater (2+2)" | "Seater/Sleeper (2+1)";
-type ACType = "AC" | "Non-AC";
-type Status = "Active" | "Maintenance" | "Inactive";
-
-interface BusRow {
-  no: string;
-  name: string;
-  type: BusType;
-  ac: ACType;
-  seats: number;
-  status: Status;
-  color: string;
-}
-
-const initialRows: BusRow[] = [
-  { no: "TS 09 AB 1234", name: "KenRoute Volvo", type: "Sleeper (2+1)", ac: "AC", seats: 40, status: "Active", color: "text-emerald-500" },
-  { no: "TS 09 CD 5678", name: "KenRoute Scania", type: "Seater (2+2)", ac: "AC", seats: 45, status: "Active", color: "text-slate-700" },
-  { no: "TS 09 EF 9101", name: "KenRoute Benz", type: "Sleeper (2+1)", ac: "Non-AC", seats: 36, status: "Maintenance", color: "text-amber-500" },
-  { no: "TS 09 GH 1122", name: "KenRoute Starz", type: "Seater/Sleeper (2+1)", ac: "AC", seats: 50, status: "Active", color: "text-sky-600" },
-  { no: "TS 09 IJ 3344", name: "KenRoute Deluxe", type: "Seater (2+2)", ac: "AC", seats: 40, status: "Inactive", color: "text-rose-500" },
-];
 
 const statusStyles: Record<Status, string> = {
   Active:
@@ -140,7 +125,7 @@ function AcBadge({ ac }: { ac: ACType }) {
 }
 
 function BusesPage() {
-  const [rows, setRows] = useState<BusRow[]>(initialRows);
+  const [rows, setRows] = useState<BusRow[]>(busFleet);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
