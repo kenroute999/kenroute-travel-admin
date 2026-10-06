@@ -967,7 +967,7 @@ function BedCell({
     >
       {/* Pillow */}
       <span className="h-1.5 w-4/5 rounded-full bg-current opacity-25" />
-      <span className="leading-none flex items-center gap-1">
+      <span className="leading-none flex items-center gap-1 text-foreground">
         {seat.label}
         <GenderMark seat={seat} />
       </span>
@@ -1014,7 +1014,7 @@ function DoubleBedCell({
             )}
           >
             <span className="h-1.5 w-4/5 rounded-full bg-current opacity-25" />
-            <span className="leading-none flex items-center gap-1">
+            <span className="leading-none flex items-center gap-1 text-foreground">
               {seat.label}
               <GenderMark seat={seat} />
             </span>
@@ -1055,7 +1055,7 @@ function SeatCell({
       <span className="pointer-events-none absolute -left-1 top-2 h-4 w-1 rounded-full bg-current opacity-30" />
       <span className="pointer-events-none absolute -right-1 top-2 h-4 w-1 rounded-full bg-current opacity-30" />
 
-      <span className="leading-none flex items-center gap-1">
+      <span className="leading-none flex items-center gap-1 text-foreground">
         {seat.label}
         <GenderMark seat={seat} />
       </span>
