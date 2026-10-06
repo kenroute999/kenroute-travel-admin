@@ -5,9 +5,8 @@ import { AuthError, fetchMe } from "./auth";
 /**
  * KenRoute Admin — client authentication state.
  *
- * Storage: localStorage (key below). This matches the existing Conductor web
- * reference implementation (`kenroute.session`). Tokens are kept client-side so
- * the session survives a page refresh; nothing sensitive is kept in memory only.
+ * Storage: sessionStorage (key below). The session survives a page refresh but
+ * ends when the browser is closed, so the next visit asks for the password again.
  * No passwords are ever stored here — only the token pair and the /me profile.
  */
 const STORAGE_KEY = "kenroute.admin.session";
@@ -24,7 +23,9 @@ function hydrate() {
   if (hydrated || typeof window === "undefined") return;
   hydrated = true;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    // Sessions used to be kept across browser restarts; drop any left over from then.
+    window.localStorage.removeItem(STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
     session = raw ? (JSON.parse(raw) as AuthSessionValue) : null;
     if (session && (!session.tokens?.accessToken || !session.user)) session = null;
   } catch {
@@ -44,8 +45,8 @@ function refresh() {
 function persist() {
   if (typeof window === "undefined") return;
   try {
-    if (session) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-    else window.localStorage.removeItem(STORAGE_KEY);
+    if (session) window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    else window.sessionStorage.removeItem(STORAGE_KEY);
   } catch {
     /* storage unavailable (private mode, quota) — session stays in memory */
   }
