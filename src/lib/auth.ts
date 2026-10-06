@@ -80,8 +80,9 @@ export function apiBaseUrl(): string {
  * Vite, so access is defensive — this keeps the service importable anywhere.
  */
 function readEnv(): Record<string, string | undefined> {
-  const meta = import.meta as unknown as { env?: Record<string, string | undefined> };
-  if (meta.env) return meta.env;
+  // Vite only fills this in where `import.meta.env` is written out literally;
+  // reaching it through another variable leaves it undefined in the browser.
+  if (import.meta.env) return import.meta.env;
   const proc = globalThis as unknown as { process?: { env?: Record<string, string | undefined> } };
   return proc.process?.env ?? {};
 }
