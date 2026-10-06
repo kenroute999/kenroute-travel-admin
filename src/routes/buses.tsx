@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   Bus,
   BusFront,
@@ -37,13 +39,17 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { type BusType, type ACType, type BusStatus as Status } from "@/lib/buses";
+import { errorMessage } from "@/lib/api/client";
 import {
-  busFleet,
-  type Bus as BusRow,
-  type BusType,
-  type ACType,
-  type BusStatus as Status,
-} from "@/lib/buses";
+  createBus,
+  deleteBus,
+  fleetKeys,
+  listBuses,
+  updateBus,
+  type BusInput,
+  type FleetBus as BusRow,
+} from "@/lib/api/fleet";
 
 export const Route = createFileRoute("/buses")({
   head: () => ({
@@ -125,35 +131,64 @@ function AcBadge({ ac }: { ac: ACType }) {
 }
 
 function BusesPage() {
-  const [rows, setRows] = useState<BusRow[]>(busFleet);
+  const queryClient = useQueryClient();
+  const busesQuery = useQuery({ queryKey: fleetKeys.buses, queryFn: listBuses });
+  const rows = useMemo(() => busesQuery.data ?? [], [busesQuery.data]);
+  const loading = busesQuery.isPending;
+  const [editing, setEditing] = useState<BusRow | null>(null);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [openAdd, setOpenAdd] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(t);
-  }, []);
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
       const q = query.trim().toLowerCase();
-      const matchesQ =
-        !q ||
-        r.no.toLowerCase().includes(q) ||
-        r.name.toLowerCase().includes(q);
+      const matchesQ = !q || r.no.toLowerCase().includes(q) || r.name.toLowerCase().includes(q);
       const matchesT = typeFilter === "all" || r.type === typeFilter;
       const matchesS = statusFilter === "all" || r.status === statusFilter;
       return matchesQ && matchesT && matchesS;
     });
   }, [rows, query, typeFilter, statusFilter]);
 
-  const handleSave = (row: BusRow) => {
-    setRows((prev) => [row, ...prev]);
-    setOpenAdd(false);
+  const refresh = () => queryClient.invalidateQueries({ queryKey: fleetKeys.buses });
+
+  const save = useMutation({
+    mutationFn: (bus: BusInput) => (editing ? updateBus(editing.id, bus) : createBus(bus)),
+    onSuccess: (bus) => {
+      toast.success(editing ? `Bus ${bus.no} updated` : `Bus ${bus.no} added`);
+      setOpenAdd(false);
+      return refresh();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const remove = useMutation({
+    mutationFn: deleteBus,
+    onSuccess: () => {
+      toast.success("Bus deleted");
+      return refresh();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const openNew = () => {
+    setEditing(null);
+    setOpenAdd(true);
   };
+
+  const openEdit = (row: BusRow) => {
+    setEditing(row);
+    setOpenAdd(true);
+  };
+
+  const handleDelete = (row: BusRow) => {
+    if (window.confirm(`Delete bus ${row.no}?`)) remove.mutate(row.id);
+  };
+
+  const count = (status: Status) => rows.filter((r) => r.status === status).length;
+  const share = (n: number) =>
+    rows.length === 0 ? "0% of total" : `${Math.round((n / rows.length) * 100)}% of total`;
 
   return (
     <>
@@ -162,7 +197,7 @@ function BusesPage() {
         breadcrumb="Buses"
         actions={
           <Button
-            onClick={() => setOpenAdd(true)}
+            onClick={openNew}
             className="bg-brand text-brand-foreground hover:bg-brand/90 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 h-10 px-4 rounded-xl"
           >
             <Plus className="size-4" />
@@ -195,9 +230,7 @@ function BusesPage() {
                   <SelectItem value="all">All Types</SelectItem>
                   <SelectItem value="Sleeper (2+1)">Sleeper (2+1)</SelectItem>
                   <SelectItem value="Seater (2+2)">Seater (2+2)</SelectItem>
-                  <SelectItem value="Seater/Sleeper (2+1)">
-                    Seater/Sleeper (2+1)
-                  </SelectItem>
+                  <SelectItem value="Seater/Sleeper (2+1)">Seater/Sleeper (2+1)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -241,7 +274,7 @@ function BusesPage() {
                   ))
                 : filtered.map((r) => (
                     <tr
-                      key={r.no}
+                      key={r.id}
                       className="border-t border-border transition-colors hover:bg-brand/[0.04] group"
                     >
                       <td className="px-6 py-4">
@@ -269,12 +302,15 @@ function BusesPage() {
                         <div className="flex items-center justify-end gap-1">
                           <button
                             aria-label="Edit"
+                            onClick={() => openEdit(r)}
                             className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-brand/10 hover:text-brand transition-all hover:scale-110"
                           >
                             <Pencil className="size-4" />
                           </button>
                           <button
                             aria-label="Delete"
+                            disabled={remove.isPending}
+                            onClick={() => handleDelete(r)}
                             className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-rose-50 hover:text-rose-600 transition-all hover:scale-110"
                           >
                             <Trash2 className="size-4" />
@@ -300,7 +336,7 @@ function BusesPage() {
           <p className="text-sm text-muted-foreground">
             Showing <span className="font-medium text-foreground">1</span> to{" "}
             <span className="font-medium text-foreground">{filtered.length}</span> of{" "}
-            <span className="font-medium text-foreground">25</span> results
+            <span className="font-medium text-foreground">{rows.length}</span> results
           </p>
           <div className="flex items-center gap-1">
             <button className="size-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
@@ -328,61 +364,107 @@ function BusesPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mt-6">
-        <StatCard label="Total Buses" value="156" delta="12 this month" icon={Bus} tone="brand" />
-        <StatCard label="Active Buses" value="122" delta="78% of total" icon={CheckCircle2} tone="brand" />
-        <StatCard label="Maintenance" value="18" delta="12% of total" icon={Wrench} tone="warning" />
-        <StatCard label="Inactive Buses" value="16" delta="10% of total" icon={XCircle} tone="danger" />
-        <StatCard label="Total Seats" value="6,156" delta="256 this month" icon={Armchair} tone="info" />
+        <StatCard
+          label="Total Buses"
+          value={String(rows.length)}
+          delta="in your fleet"
+          icon={Bus}
+          tone="brand"
+        />
+        <StatCard
+          label="Active Buses"
+          value={String(count("Active"))}
+          delta={share(count("Active"))}
+          icon={CheckCircle2}
+          tone="brand"
+        />
+        <StatCard
+          label="Maintenance"
+          value={String(count("Maintenance"))}
+          delta={share(count("Maintenance"))}
+          icon={Wrench}
+          tone="warning"
+        />
+        <StatCard
+          label="Inactive Buses"
+          value={String(count("Inactive"))}
+          delta={share(count("Inactive"))}
+          icon={XCircle}
+          tone="danger"
+        />
+        <StatCard
+          label="Total Seats"
+          value={rows.reduce((sum, r) => sum + r.seats, 0).toLocaleString("en-IN")}
+          delta="across all buses"
+          icon={Armchair}
+          tone="info"
+        />
       </div>
 
       {/* Add Bus slide-over */}
       <Sheet open={openAdd} onOpenChange={setOpenAdd}>
         <SheetContent className="w-full sm:max-w-md flex flex-col p-0">
           <SheetHeader className="p-6 border-b border-border">
-            <SheetTitle className="text-xl">Add New Bus</SheetTitle>
-            <SheetDescription>Enter bus details to add to your fleet</SheetDescription>
+            <SheetTitle className="text-xl">{editing ? "Edit Bus" : "Add New Bus"}</SheetTitle>
+            <SheetDescription>
+              {editing ? `Update ${editing.no}` : "Enter bus details to add to your fleet"}
+            </SheetDescription>
           </SheetHeader>
 
           <form
+            key={editing?.id ?? "new"}
             className="flex-1 overflow-y-auto p-6 space-y-5"
             onSubmit={(e) => {
               e.preventDefault();
               const fd = new FormData(e.currentTarget);
-              handleSave({
+              save.mutate({
                 no: String(fd.get("no") || ""),
                 name: String(fd.get("name") || ""),
                 type: (fd.get("type") as BusType) || "Sleeper (2+1)",
                 ac: (fd.get("ac") as ACType) || "AC",
                 seats: Number(fd.get("seats") || 0),
                 status: (fd.get("status") as Status) || "Active",
-                color: "text-brand",
               });
             }}
             id="add-bus-form"
           >
             <Field label="Bus Number" required>
-              <Input name="no" placeholder="Enter bus number" required className="h-11 rounded-xl" />
+              <Input
+                name="no"
+                defaultValue={editing?.no}
+                placeholder="Enter bus number"
+                required
+                className="h-11 rounded-xl"
+              />
             </Field>
             <Field label="Bus Name" required>
-              <Input name="name" placeholder="Enter bus name" required className="h-11 rounded-xl" />
+              <Input
+                name="name"
+                defaultValue={editing?.name}
+                placeholder="Enter bus name"
+                required
+                className="h-11 rounded-xl"
+              />
             </Field>
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="Bus Type" required>
-                <Select name="type" defaultValue="Sleeper (2+1)">
-                  <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                <Select name="type" defaultValue={editing?.type ?? "Sleeper (2+1)"}>
+                  <SelectTrigger className="h-11 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Sleeper (2+1)">Sleeper (2+1)</SelectItem>
                     <SelectItem value="Seater (2+2)">Seater (2+2)</SelectItem>
-                    <SelectItem value="Seater/Sleeper (2+1)">
-                      Seater/Sleeper (2+1)
-                    </SelectItem>
+                    <SelectItem value="Seater/Sleeper (2+1)">Seater/Sleeper (2+1)</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
               <Field label="AC Type" required>
-                <Select name="ac" defaultValue="AC">
-                  <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                <Select name="ac" defaultValue={editing?.ac ?? "AC"}>
+                  <SelectTrigger className="h-11 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="AC">AC</SelectItem>
                     <SelectItem value="Non-AC">Non-AC</SelectItem>
@@ -396,14 +478,18 @@ function BusesPage() {
                 name="seats"
                 type="number"
                 min={1}
+                max={80}
+                defaultValue={editing?.seats}
                 placeholder="Enter total seats"
                 required
                 className="h-11 rounded-xl"
               />
             </Field>
             <Field label="Status" required>
-              <Select name="status" defaultValue="Active">
-                <SelectTrigger className="h-11 rounded-xl border-brand/40 focus:border-brand"><SelectValue /></SelectTrigger>
+              <Select name="status" defaultValue={editing?.status ?? "Active"}>
+                <SelectTrigger className="h-11 rounded-xl border-brand/40 focus:border-brand">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Active">Active</SelectItem>
                   <SelectItem value="Maintenance">Maintenance</SelectItem>
@@ -427,8 +513,8 @@ function BusesPage() {
               form="add-bus-form"
               className="h-11 rounded-xl px-5 bg-brand text-brand-foreground hover:bg-brand/90 flex-1 sm:flex-none shadow-sm hover:shadow-md transition-all"
             >
-              <Plus className="size-4" />
-              Save Bus
+              {!editing && <Plus className="size-4" />}
+              {save.isPending ? "Saving…" : editing ? "Save Changes" : "Save Bus"}
             </Button>
           </SheetFooter>
         </SheetContent>

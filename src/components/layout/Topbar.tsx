@@ -1,4 +1,3 @@
-import { ChevronDown } from "lucide-react";
 import { useSession } from "@/lib/session";
 
 function roleLabel(role: string | undefined): string {
@@ -22,7 +21,6 @@ export function Topbar() {
           <div className="text-sm font-semibold text-foreground">{displayName}</div>
           <div className="text-xs text-muted-foreground">{roleLabel(session?.user.role)}</div>
         </div>
-        <ChevronDown className="size-4 text-muted-foreground" />
       </div>
     </header>
   );
