@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Bus,
@@ -8,12 +8,14 @@ import {
   BarChart3,
   Armchair,
   UserCog,
+  Ticket,
   Plug,
   Settings,
   LogOut,
 } from "lucide-react";
 import logo from "@/assets/kenroute-logo.png";
 import { cn } from "@/lib/utils";
+import { signOut } from "@/lib/api/client";
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -24,15 +26,22 @@ const items = [
   { title: "Reports", url: "/reports", icon: BarChart3 },
   { title: "Seat Layouts", url: "/seat-layouts", icon: Armchair },
   { title: "Drivers", url: "/drivers", icon: UserCog },
+  { title: "Conductors", url: "/conductors", icon: Ticket },
   { title: "OTA Integrations", url: "/integrations", icon: Plug },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
+
+  async function handleLogout() {
+    await signOut();
+    await navigate({ to: "/login", replace: true });
+  }
 
   return (
-    <aside className="hidden md:flex flex-col w-64 shrink-0 bg-navy text-navy-foreground border-r border-sidebar-border">
+    <aside className="hidden md:flex flex-col w-64 shrink-0 sticky top-0 h-screen bg-navy text-navy-foreground border-r border-sidebar-border">
       <div className="h-20 flex items-center gap-3 px-5 border-b border-sidebar-border">
         <div className="size-10 rounded-lg bg-white/95 flex items-center justify-center p-1 shadow-sm">
           <img src={logo} alt="KenRoute" className="size-full object-contain" />
@@ -47,10 +56,7 @@ export function AppSidebar() {
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         {items.map((item) => {
-          const active =
-            item.url === "/"
-              ? pathname === "/"
-              : pathname.startsWith(item.url);
+          const active = item.url === "/" ? pathname === "/" : pathname.startsWith(item.url);
           return (
             <Link
               key={item.url}
@@ -70,7 +76,11 @@ export function AppSidebar() {
       </nav>
 
       <div className="p-3 border-t border-sidebar-border">
-        <button className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/70 hover:bg-white/5 hover:text-white transition-colors">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+        >
           <LogOut className="size-[18px]" />
           Logout
         </button>
