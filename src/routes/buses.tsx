@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -130,6 +130,12 @@ function AcBadge({ ac }: { ac: ACType }) {
   );
 }
 
+const SEATS_BY_TYPE: Record<BusType, number> = {
+  "Sleeper (2+1)": 36,
+  "Seater (2+2)": 45,
+  "Seater/Sleeper (2+1)": 48,
+};
+
 function BusesPage() {
   const queryClient = useQueryClient();
   const busesQuery = useQuery({ queryKey: fleetKeys.buses, queryFn: listBuses });
@@ -140,6 +146,11 @@ function BusesPage() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [openAdd, setOpenAdd] = useState(false);
+  const [busType, setBusType] = useState<BusType>("Sleeper (2+1)");
+
+  useEffect(() => {
+    setBusType(editing?.type ?? "Sleeper (2+1)");
+  }, [editing, openAdd]);
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
@@ -449,7 +460,7 @@ function BusesPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="Bus Type" required>
-                <Select name="type" defaultValue={editing?.type ?? "Sleeper (2+1)"}>
+                <Select name="type" defaultValue={editing?.type ?? "Sleeper (2+1)"} onValueChange={(v) => setBusType(v as BusType)}>
                   <SelectTrigger className="h-11 rounded-xl">
                     <SelectValue />
                   </SelectTrigger>
@@ -475,11 +486,12 @@ function BusesPage() {
 
             <Field label="Total Seats" required>
               <Input
+                key={editing ? `edit-${editing.id}` : `new-${busType}`}
                 name="seats"
                 type="number"
                 min={1}
                 max={80}
-                defaultValue={editing?.seats}
+                defaultValue={editing ? editing.seats : SEATS_BY_TYPE[busType]}
                 placeholder="Enter total seats"
                 required
                 className="h-11 rounded-xl"

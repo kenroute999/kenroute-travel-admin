@@ -853,23 +853,6 @@ function SeaterGrid({
         <span>Right seats</span>
       </div>
 
-      {/* Front row (lower deck only): storage on the left, washrooms on the right */}
-      {deck === "lower" && (
-        <div className="grid" style={{ gridTemplateColumns: GRID_COLS_22, gap: GRID_GAP }}>
-          <div
-            className="h-9 rounded-lg bg-muted/80 border border-border"
-            title="Unavailable area"
-          />
-          <div
-            className="h-9 rounded-lg bg-muted/80 border border-border"
-            title="Unavailable area"
-          />
-          <div />
-          <WashroomCell />
-          <WashroomCell />
-        </div>
-      )}
-
       {rows.map((r) => {
         const rowSeats = seats.filter((s) => s.row === r);
 
@@ -927,17 +910,6 @@ function SeaterGrid({
   );
 }
 
-function WashroomCell() {
-  return (
-    <div
-      className="h-9 flex-1 rounded-lg border-2 border-border bg-card grid place-items-center text-[9px] font-semibold text-muted-foreground"
-      title="Washroom"
-    >
-      WC
-    </div>
-  );
-}
-
 // Rectangular bunk for a single sleeper berth - uniform size on every bus/deck
 function BedCell({
   seat,
@@ -967,7 +939,7 @@ function BedCell({
     >
       {/* Pillow */}
       <span className="h-1.5 w-4/5 rounded-full bg-current opacity-25" />
-      <span className="leading-none flex items-center gap-1">
+      <span className="leading-none flex items-center gap-1 text-foreground">
         {seat.label}
         <GenderMark seat={seat} />
       </span>
@@ -1014,7 +986,7 @@ function DoubleBedCell({
             )}
           >
             <span className="h-1.5 w-4/5 rounded-full bg-current opacity-25" />
-            <span className="leading-none flex items-center gap-1">
+            <span className="leading-none flex items-center gap-1 text-foreground">
               {seat.label}
               <GenderMark seat={seat} />
             </span>
@@ -1055,7 +1027,7 @@ function SeatCell({
       <span className="pointer-events-none absolute -left-1 top-2 h-4 w-1 rounded-full bg-current opacity-30" />
       <span className="pointer-events-none absolute -right-1 top-2 h-4 w-1 rounded-full bg-current opacity-30" />
 
-      <span className="leading-none flex items-center gap-1">
+      <span className="leading-none flex items-center gap-1 text-foreground">
         {seat.label}
         <GenderMark seat={seat} />
       </span>
