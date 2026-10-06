@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
+import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/api/client";
 import { bookingsKey, createBooking, ID_PROOFS, type NewBooking } from "@/lib/api/bookings";
 import { fleetKeys, listSchedules, listTripSeats, tripSeatsKey } from "@/lib/api/fleet";
@@ -59,7 +60,8 @@ export function NewBookingSheet({
     queryFn: () => listTripSeats(tripId),
     enabled: open && !!trip,
   });
-  const freeSeats = (seatsQuery.data ?? []).filter((s) => s.status === "AVAILABLE");
+  const allSeats = seatsQuery.data ?? [];
+  const freeSeats = allSeats.filter((s) => s.status === "AVAILABLE");
   const seat = freeSeats.find((s) => s.id === form.seatId);
 
   const pickTrip = (id: string) => {
@@ -183,27 +185,64 @@ export function NewBookingSheet({
                 : undefined
             }
           >
-            <select
-              className={selectClass}
-              value={form.seatId}
-              disabled={!trip}
-              onChange={(e) => set({ seatId: e.target.value })}
-            >
-              <option value="">
-                {!trip
-                  ? "Choose a trip first"
-                  : seatsQuery.isLoading
-                    ? "Loading…"
-                    : `${freeSeats.length} seats free`}
-              </option>
-              {freeSeats.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.seatNumber} · {s.deck === "UPPER" ? "Upper" : "Lower"} · ₹
-                  {Number(s.fare).toLocaleString("en-IN")}
-                  {s.reservedFor ? ` · ${s.reservedFor === "FEMALE" ? "Female" : "Male"} only` : ""}
-                </option>
-              ))}
-            </select>
+            <p className="text-xs text-muted-foreground">
+              {!trip
+                ? "Choose a trip first"
+                : seatsQuery.isLoading
+                  ? "Loading…"
+                  : `${freeSeats.length} of ${allSeats.length} seats free. Grey seats are already booked.`}
+            </p>
+            {(["LOWER", "UPPER"] as const).map((deck) => {
+              const onDeck = allSeats.filter((s) => s.deck === deck);
+              if (onDeck.length === 0) return null;
+              return (
+                <div key={deck}>
+                  <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {deck === "UPPER" ? "Upper deck" : "Lower deck"}
+                  </p>
+                  <div className="grid grid-cols-6 gap-1.5">
+                    {onDeck.map((s) => {
+                      const free = s.status === "AVAILABLE";
+                      const picked = s.id === form.seatId;
+                      const only =
+                        s.reservedFor === "FEMALE"
+                          ? "Female only"
+                          : s.reservedFor
+                            ? "Male only"
+                            : "";
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          disabled={!free}
+                          aria-pressed={picked}
+                          title={
+                            free
+                              ? `Seat ${s.seatNumber} · ₹${Number(s.fare).toLocaleString("en-IN")}${only && ` · ${only}`}`
+                              : `Seat ${s.seatNumber} · ${s.status === "BOOKED" ? "Booked" : "Blocked"}`
+                          }
+                          onClick={() => set({ seatId: picked ? "" : s.id })}
+                          className={cn(
+                            "h-9 rounded-md border text-xs font-semibold transition",
+                            picked
+                              ? "border-brand bg-brand text-brand-foreground"
+                              : !free
+                                ? "cursor-not-allowed border-border bg-muted text-muted-foreground/60 line-through"
+                                : s.reservedFor === "FEMALE"
+                                  ? "border-dashed border-pink-400 bg-pink-50 text-pink-600 hover:bg-pink-100"
+                                  : s.reservedFor === "MALE"
+                                    ? "border-dashed border-blue-400 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                                    : "border-success/40 bg-success/10 text-success hover:bg-success/20",
+                          )}
+                        >
+                          {s.seatNumber}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </Field>
 
           <Field label="Passenger Name" required>
