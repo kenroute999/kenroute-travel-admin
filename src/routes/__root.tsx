@@ -2,16 +2,20 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   Link,
+  Navigate,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
+import { useEffect } from "react";
 
 import appCss from "../styles.css?url";
 import { AppSidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { Toaster } from "@/components/ui/sonner";
+import { initSession, useSession } from "@/lib/session";
 
 function NotFoundComponent() {
   return (
@@ -49,8 +53,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  head: () => ({
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({  head: () => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
@@ -81,6 +84,33 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { session } = useSession();
+
+  useEffect(() => {
+    // Restore + re-verify the session (GET /me) on app start.
+    void initSession();
+  }, []);
+
+  // Route guard: unauthenticated users only ever see /login.
+  // NOTE: `beforeLoad` is intentionally not used on this root route — with the
+  // installed @tanstack/router-core version its options type collapses to
+  // `=> never`, rejecting every implementation at type level while working at
+  // runtime. The render gate below is type-safe and behavior-identical for this
+  // client-rendered console (no protected markup is emitted for guests: the
+  // early return renders nothing but the redirect).
+  if (pathname !== "/login" && !session) {
+    return <Navigate to="/login" replace />;
+  }
+  if (pathname === "/login") {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <Outlet />
+        <Toaster />
+      </QueryClientProvider>
+    );
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <div className="flex min-h-screen w-full bg-background">

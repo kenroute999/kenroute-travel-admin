@@ -1,6 +1,37 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { Pencil, Plus, Search, Trash2, UserCog } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatusPill } from "@/components/ui/status-pill";
+import { Field } from "@/components/ui/field";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { errorMessage } from "@/lib/api/client";
+import {
+  createDriver,
+  deleteDriver,
+  driverKeys,
+  listDrivers,
+  updateDriver,
+  type Driver,
+} from "@/lib/api/drivers";
 
 export const Route = createFileRoute("/drivers")({
   head: () => ({
@@ -12,41 +43,277 @@ export const Route = createFileRoute("/drivers")({
   component: DriversPage,
 });
 
-const rows = [
-  { name: "Ramesh Kumar", license: "TS-DL-2018-23145", phone: "9876543210", exp: "8 yrs", status: "Active" },
-  { name: "Suresh Babu", license: "TS-DL-2016-19872", phone: "9876543211", exp: "10 yrs", status: "Active" },
-  { name: "Mahesh Reddy", license: "AP-DL-2019-44521", phone: "9876543212", exp: "6 yrs", status: "Inactive" },
-  { name: "Venkat Rao", license: "TS-DL-2014-11234", phone: "9876543213", exp: "12 yrs", status: "Active" },
-];
-
 function DriversPage() {
+  const queryClient = useQueryClient();
+  const {
+    data: rows = [],
+    isPending,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: driverKeys.list,
+    queryFn: listDrivers,
+  });
+
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Driver | null>(null);
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: driverKeys.list });
+
+  const save = useMutation({
+    mutationFn: (fd: FormData) => {
+      const fields = {
+        name: String(fd.get("name")).trim(),
+        licenseNo: String(fd.get("license")).trim(),
+        phone: String(fd.get("phone")).trim(),
+        experienceYears: Number(fd.get("experience")),
+        isActive: fd.get("status") !== "Inactive",
+      };
+      return editing ? updateDriver(editing.id, fields) : createDriver(fields);
+    },
+    onSuccess: () => {
+      toast.success(editing ? "Driver updated" : "Driver added");
+      setOpen(false);
+      return refresh();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const remove = useMutation({
+    mutationFn: deleteDriver,
+    onSuccess: () => {
+      toast.success("Driver deleted");
+      return refresh();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        r.licenseNo.toLowerCase().includes(q) ||
+        r.phone.includes(q),
+    );
+  }, [rows, query]);
+
+  const openAdd = () => {
+    setEditing(null);
+    setOpen(true);
+  };
+
+  const openEdit = (row: Driver) => {
+    setEditing(row);
+    setOpen(true);
+  };
+
+  const handleDelete = (row: Driver) => {
+    if (window.confirm(`Delete driver "${row.name}"?`)) remove.mutate(row.id);
+  };
+
   return (
     <>
-      <PageHeader title="Drivers" breadcrumb="Drivers" />
-      <div className="bg-card rounded-2xl border border-border shadow-sm overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40">
-            <tr className="text-left text-muted-foreground">
-              <th className="px-6 py-3 font-medium">Name</th>
-              <th className="px-6 py-3 font-medium">License No.</th>
-              <th className="px-6 py-3 font-medium">Phone</th>
-              <th className="px-6 py-3 font-medium">Experience</th>
-              <th className="px-6 py-3 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.license} className="border-t border-border hover:bg-muted/30">
-                <td className="px-6 py-4 font-medium">{r.name}</td>
-                <td className="px-6 py-4">{r.license}</td>
-                <td className="px-6 py-4">{r.phone}</td>
-                <td className="px-6 py-4">{r.exp}</td>
-                <td className="px-6 py-4"><StatusPill status={r.status} /></td>
+      <PageHeader
+        title="Drivers"
+        breadcrumb="Drivers"
+        actions={
+          <button
+            onClick={openAdd}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand text-brand-foreground font-medium text-sm hover:opacity-90"
+          >
+            <Plus className="size-4" /> Add Driver
+          </button>
+        }
+      />
+      <div className="bg-card rounded-2xl border border-border shadow-sm">
+        <div className="p-4 border-b border-border">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search drivers..."
+              className="w-full h-10 pl-10 pr-4 rounded-lg border border-border bg-background text-sm outline-none focus:border-brand"
+            />
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40">
+              <tr className="text-left text-muted-foreground">
+                <th className="px-6 py-3 font-medium">Name</th>
+                <th className="px-6 py-3 font-medium">License No.</th>
+                <th className="px-6 py-3 font-medium">Phone</th>
+                <th className="px-6 py-3 font-medium">Experience</th>
+                <th className="px-6 py-3 font-medium">Status</th>
+                <th className="px-6 py-3 font-medium text-right">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.map((r) => (
+                <tr key={r.id} className="border-t border-border hover:bg-muted/30">
+                  <td className="px-6 py-4 font-medium">{r.name}</td>
+                  <td className="px-6 py-4">{r.licenseNo}</td>
+                  <td className="px-6 py-4">{r.phone}</td>
+                  <td className="px-6 py-4">
+                    {r.experienceYears} {r.experienceYears === 1 ? "yr" : "yrs"}
+                  </td>
+                  <td className="px-6 py-4">
+                    <StatusPill status={r.isActive ? "Active" : "Inactive"} />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        aria-label="Edit"
+                        onClick={() => openEdit(r)}
+                        className="size-8 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-brand"
+                      >
+                        <Pencil className="size-4" />
+                      </button>
+                      <button
+                        aria-label="Delete"
+                        disabled={remove.isPending}
+                        onClick={() => handleDelete(r)}
+                        className="size-8 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-danger disabled:opacity-50"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-16 text-center text-muted-foreground">
+                    <UserCog className="size-10 mx-auto mb-2 opacity-40" />
+                    {isPending
+                      ? "Loading drivers…"
+                      : isError
+                        ? errorMessage(error)
+                        : rows.length === 0
+                          ? "No drivers yet. Use Add Driver to create the first one."
+                          : "No drivers match your search."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
+
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent className="w-full sm:max-w-md flex flex-col p-0">
+          <SheetHeader className="p-6 border-b border-border">
+            <SheetTitle className="text-xl">
+              {editing ? "Edit Driver" : "Add New Driver"}
+            </SheetTitle>
+            <SheetDescription>
+              {editing
+                ? "Update the driver's details"
+                : "Enter driver details to add to your staff"}
+            </SheetDescription>
+          </SheetHeader>
+
+          <form
+            key={editing?.id ?? "new"}
+            id="driver-form"
+            className="flex-1 overflow-y-auto p-6 space-y-5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              save.mutate(new FormData(e.currentTarget));
+            }}
+          >
+            <Field label="Driver Name" required>
+              <Input
+                name="name"
+                defaultValue={editing?.name}
+                placeholder="Enter driver name"
+                required
+                minLength={2}
+                maxLength={60}
+                className="h-11 rounded-xl"
+              />
+            </Field>
+            <Field label="License Number" required>
+              <Input
+                name="license"
+                defaultValue={editing?.licenseNo}
+                placeholder="e.g. TS-DL-2018-23145"
+                required
+                minLength={5}
+                maxLength={20}
+                className="h-11 rounded-xl uppercase"
+              />
+            </Field>
+            <Field label="Mobile Number" required>
+              <Input
+                name="phone"
+                defaultValue={editing?.phone}
+                placeholder="10-digit mobile number"
+                required
+                inputMode="numeric"
+                pattern="[6-9][0-9]{9}"
+                title="Enter a 10-digit mobile number"
+                maxLength={10}
+                className="h-11 rounded-xl"
+              />
+            </Field>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Experience (years)" required>
+                <Input
+                  name="experience"
+                  type="number"
+                  min={0}
+                  max={60}
+                  step={1}
+                  defaultValue={editing?.experienceYears}
+                  placeholder="e.g. 8"
+                  required
+                  className="h-11 rounded-xl"
+                />
+              </Field>
+              <Field label="Status" required>
+                <Select
+                  name="status"
+                  defaultValue={editing?.isActive === false ? "Inactive" : "Active"}
+                >
+                  <SelectTrigger className="h-11 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+          </form>
+
+          <SheetFooter className="p-6 border-t border-border bg-muted/20 flex-row gap-3 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              className="h-11 rounded-xl px-5 flex-1 sm:flex-none"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="driver-form"
+              disabled={save.isPending}
+              className="h-11 rounded-xl px-5 bg-brand text-brand-foreground hover:bg-brand/90 flex-1 sm:flex-none shadow-sm hover:shadow-md transition-all"
+            >
+              {!editing && <Plus className="size-4" />}
+              {save.isPending ? "Saving…" : editing ? "Save Changes" : "Save Driver"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }
