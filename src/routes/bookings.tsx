@@ -48,6 +48,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/api/client";
 import { downloadCsv } from "@/lib/csv";
+import { NewBookingSheet } from "@/components/bookings/NewBookingSheet";
 import {
   bookingsKey,
   cancelBooking,
@@ -297,6 +298,7 @@ function BookingsPage() {
   const schedulesQuery = useQuery({ queryKey: fleetKeys.schedules, queryFn: listSchedules });
   const rows = useMemo(() => (bookingsQuery.data ?? []).map(toRow), [bookingsQuery.data]);
   const loading = bookingsQuery.isPending;
+  const [booking, setBooking] = useState(false);
   const [query, setQuery] = useState("");
   const [routeFilter, setRouteFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -362,8 +364,44 @@ function BookingsPage() {
   const exportCsv = () =>
     downloadCsv(
       "kenroute-bookings.csv",
-      ["Booking ID", "PNR", "Source", "Agent", "Passenger", "Mobile", "From", "To", "Boarding", "Dropping", "Bus", "Seat", "Journey", "Departure", "Amount", "Payment", "Status"],
-      filtered.map((r) => [r.id, r.pnr, r.source, r.agent, r.passenger, r.phone, r.from, r.to, r.boarding, r.dropping, r.bus, r.seat, r.journey, r.depart, r.amount, r.payment, r.status]),
+      [
+        "Booking ID",
+        "PNR",
+        "Source",
+        "Agent",
+        "Passenger",
+        "Mobile",
+        "From",
+        "To",
+        "Boarding",
+        "Dropping",
+        "Bus",
+        "Seat",
+        "Journey",
+        "Departure",
+        "Amount",
+        "Payment",
+        "Status",
+      ],
+      filtered.map((r) => [
+        r.id,
+        r.pnr,
+        r.source,
+        r.agent,
+        r.passenger,
+        r.phone,
+        r.from,
+        r.to,
+        r.boarding,
+        r.dropping,
+        r.bus,
+        r.seat,
+        r.journey,
+        r.depart,
+        r.amount,
+        r.payment,
+        r.status,
+      ]),
     );
 
   const totalBookings = SOURCE_ORDER.reduce((s, k) => s + sourceTotals[k].count, 0);
@@ -404,11 +442,7 @@ function BookingsPage() {
               Export
             </Button>
             <Button
-              onClick={() =>
-                toast.info(
-                  "Bookings are made in the Agent app. Booking from Admin is not available yet.",
-                )
-              }
+              onClick={() => setBooking(true)}
               className="bg-brand text-brand-foreground hover:bg-brand/90 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 h-10 px-4 rounded-xl"
             >
               <Plus className="size-4" />
@@ -996,6 +1030,7 @@ function BookingsPage() {
           </div>
         </SheetContent>
       </Sheet>
+      <NewBookingSheet open={booking} onOpenChange={setBooking} />
     </>
   );
 }
