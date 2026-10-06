@@ -47,6 +47,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/api/client";
+import { downloadCsv } from "@/lib/csv";
 import {
   bookingsKey,
   cancelBooking,
@@ -358,58 +359,12 @@ function BookingsPage() {
   ).length;
   const occupancy = seatsOffered === 0 ? 0 : (seatsSold / seatsOffered) * 100;
 
-  const exportCsv = () => {
-    const header = [
-      "Booking ID",
-      "PNR",
-      "Source",
-      "Agent",
-      "Passenger",
-      "Mobile",
-      "From",
-      "To",
-      "Boarding",
-      "Dropping",
-      "Bus",
-      "Seat",
-      "Journey",
-      "Departure",
-      "Amount",
-      "Payment",
-      "Status",
-    ];
-    const lines = filtered.map((r) =>
-      [
-        r.id,
-        r.pnr,
-        r.source,
-        r.agent,
-        r.passenger,
-        r.phone,
-        r.from,
-        r.to,
-        r.boarding,
-        r.dropping,
-        r.bus,
-        r.seat,
-        r.journey,
-        r.depart,
-        r.amount,
-        r.payment,
-        r.status,
-      ]
-        .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
-        .join(","),
+  const exportCsv = () =>
+    downloadCsv(
+      "kenroute-bookings.csv",
+      ["Booking ID", "PNR", "Source", "Agent", "Passenger", "Mobile", "From", "To", "Boarding", "Dropping", "Bus", "Seat", "Journey", "Departure", "Amount", "Payment", "Status"],
+      filtered.map((r) => [r.id, r.pnr, r.source, r.agent, r.passenger, r.phone, r.from, r.to, r.boarding, r.dropping, r.bus, r.seat, r.journey, r.depart, r.amount, r.payment, r.status]),
     );
-    const url = URL.createObjectURL(
-      new Blob([[header.join(","), ...lines].join("\n")], { type: "text/csv" }),
-    );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "kenroute-bookings.csv";
-    link.click();
-    URL.revokeObjectURL(url);
-  };
 
   const totalBookings = SOURCE_ORDER.reduce((s, k) => s + sourceTotals[k].count, 0);
   const totalRevenue = SOURCE_ORDER.reduce((s, k) => s + sourceTotals[k].revenue, 0);
