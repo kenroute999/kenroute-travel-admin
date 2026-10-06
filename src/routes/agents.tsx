@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Eye, EyeOff, Pencil, Plus, Search, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -22,6 +23,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { errorMessage } from "@/lib/api/client";
+import {
+  agentKeys,
+  createAgent,
+  deleteAgent,
+  listAgents,
+  updateAgent,
+  type Agent,
+} from "@/lib/api/agents";
 
 export const Route = createFileRoute("/agents")({
   head: () => ({
@@ -33,33 +43,55 @@ export const Route = createFileRoute("/agents")({
   component: AgentsPage,
 });
 
-type Status = "Active" | "Inactive";
-
-interface AgentRow {
-  id: string;
-  name: string;
-  phone: string;
-  email: string;
-  commission: number;
-  status: Status;
-  // Comes from the agent's commission ledger, never from the form.
-  balance?: string;
-}
-
-const initialRows: AgentRow[] = [
-  { id: "1", name: "Ravi Travels", phone: "9988776655", email: "ravi@example.com", balance: "₹25,480", commission: 8, status: "Active" },
-  { id: "2", name: "Sai Tour & Travels", phone: "9123456780", email: "sai@example.com", balance: "₹18,450", commission: 10, status: "Active" },
-  { id: "3", name: "Prasad Tours", phone: "9900112233", email: "prasad@example.com", balance: "₹12,350", commission: 8, status: "Active" },
-  { id: "4", name: "Balaji Travels", phone: "9345678901", email: "balaji@example.com", balance: "₹8,900", commission: 12, status: "Inactive" },
-];
-
 function AgentsPage() {
-  // Rows live in memory until the staff API is wired in.
-  const [rows, setRows] = useState<AgentRow[]>(initialRows);
+  const queryClient = useQueryClient();
+  const {
+    data: rows = [],
+    isPending,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: agentKeys.list,
+    queryFn: listAgents,
+  });
+
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<AgentRow | null>(null);
+  const [editing, setEditing] = useState<Agent | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: agentKeys.list });
+
+  const save = useMutation({
+    mutationFn: (fd: FormData) => {
+      const password = String(fd.get("password"));
+      const fields = {
+        name: String(fd.get("name")).trim(),
+        phone: String(fd.get("phone")).trim(),
+        email: String(fd.get("email")).trim(),
+        commissionPct: Number(fd.get("commission")),
+        isActive: fd.get("status") !== "Inactive",
+      };
+      return editing
+        ? updateAgent(editing.id, { ...fields, ...(password && { password }) })
+        : createAgent({ ...fields, password });
+    },
+    onSuccess: () => {
+      toast.success(editing ? "Agent updated" : "Agent added");
+      setOpen(false);
+      return refresh();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const remove = useMutation({
+    mutationFn: deleteAgent,
+    onSuccess: () => {
+      toast.success("Agent deleted");
+      return refresh();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -78,44 +110,14 @@ function AgentsPage() {
     setOpen(true);
   };
 
-  const openEdit = (row: AgentRow) => {
+  const openEdit = (row: Agent) => {
     setEditing(row);
     setShowPassword(false);
     setOpen(true);
   };
 
-  const handleDelete = (row: AgentRow) => {
-    if (!window.confirm(`Delete agent "${row.name}"?`)) return;
-    setRows((prev) => prev.filter((r) => r.id !== row.id));
-    toast.success("Agent deleted");
-  };
-
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const email = String(fd.get("email")).trim().toLowerCase();
-
-    if (rows.some((r) => r.email === email && r.id !== editing?.id)) {
-      toast.error("An agent with this email already exists");
-      return;
-    }
-
-    // The password is not kept in the table; it goes to the API with this save.
-    const row: AgentRow = {
-      id: editing?.id ?? crypto.randomUUID(),
-      name: String(fd.get("name")).trim(),
-      phone: String(fd.get("phone")).trim(),
-      email,
-      commission: Number(fd.get("commission")),
-      status: (fd.get("status") as Status) || "Active",
-      balance: editing?.balance,
-    };
-
-    setRows((prev) =>
-      editing ? prev.map((r) => (r.id === editing.id ? row : r)) : [row, ...prev],
-    );
-    setOpen(false);
-    toast.success(editing ? "Agent updated" : "Agent added");
+  const handleDelete = (row: Agent) => {
+    if (window.confirm(`Delete agent "${row.name}"?`)) remove.mutate(row.id);
   };
 
   return (
@@ -160,12 +162,18 @@ function AgentsPage() {
             <tbody>
               {filtered.map((r) => (
                 <tr key={r.id} className="border-t border-border hover:bg-muted/30">
-                  <td className="px-6 py-4 font-medium">{r.name}</td>
+                  <td className="px-6 py-4">
+                    <div className="font-medium">{r.name}</div>
+                    <div className="text-xs text-muted-foreground">{r.agentCode}</div>
+                  </td>
                   <td className="px-6 py-4">{r.phone}</td>
                   <td className="px-6 py-4">{r.email}</td>
-                  <td className="px-6 py-4 font-medium">{r.balance ?? "—"}</td>
-                  <td className="px-6 py-4">{r.commission}%</td>
-                  <td className="px-6 py-4"><StatusPill status={r.status} /></td>
+                  {/* Comes from the agent's commission ledger once bookings exist. */}
+                  <td className="px-6 py-4 font-medium text-muted-foreground">—</td>
+                  <td className="px-6 py-4">{r.commissionPct}%</td>
+                  <td className="px-6 py-4">
+                    <StatusPill status={r.isActive ? "Active" : "Inactive"} />
+                  </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-2">
                       <button
@@ -177,8 +185,9 @@ function AgentsPage() {
                       </button>
                       <button
                         aria-label="Delete"
+                        disabled={remove.isPending}
                         onClick={() => handleDelete(r)}
-                        className="size-8 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-danger"
+                        className="size-8 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-danger disabled:opacity-50"
                       >
                         <Trash2 className="size-4" />
                       </button>
@@ -190,9 +199,13 @@ function AgentsPage() {
                 <tr>
                   <td colSpan={7} className="px-6 py-16 text-center text-muted-foreground">
                     <Users className="size-10 mx-auto mb-2 opacity-40" />
-                    {rows.length === 0
-                      ? "No agents yet. Use Add Agent to create the first one."
-                      : "No agents match your search."}
+                    {isPending
+                      ? "Loading agents…"
+                      : isError
+                        ? errorMessage(error)
+                        : rows.length === 0
+                          ? "No agents yet. Use Add Agent to create the first one."
+                          : "No agents match your search."}
                   </td>
                 </tr>
               )}
@@ -216,7 +229,10 @@ function AgentsPage() {
             key={editing?.id ?? "new"}
             id="agent-form"
             className="flex-1 overflow-y-auto p-6 space-y-5"
-            onSubmit={handleSubmit}
+            onSubmit={(e) => {
+              e.preventDefault();
+              save.mutate(new FormData(e.currentTarget));
+            }}
           >
             <Field label="Agent Name" required>
               <Input
@@ -268,6 +284,7 @@ function AgentsPage() {
                   placeholder={editing ? "Enter a new password" : "Create a password"}
                   required={!editing}
                   minLength={8}
+                  maxLength={72}
                   autoComplete="new-password"
                   className="h-11 rounded-xl pr-11"
                 />
@@ -290,15 +307,20 @@ function AgentsPage() {
                   min={0}
                   max={100}
                   step={0.5}
-                  defaultValue={editing?.commission}
+                  defaultValue={editing?.commissionPct}
                   placeholder="e.g. 8"
                   required
                   className="h-11 rounded-xl"
                 />
               </Field>
               <Field label="Status" required>
-                <Select name="status" defaultValue={editing?.status ?? "Active"}>
-                  <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                <Select
+                  name="status"
+                  defaultValue={editing?.isActive === false ? "Inactive" : "Active"}
+                >
+                  <SelectTrigger className="h-11 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Active">Active</SelectItem>
                     <SelectItem value="Inactive">Inactive</SelectItem>
@@ -320,10 +342,11 @@ function AgentsPage() {
             <Button
               type="submit"
               form="agent-form"
+              disabled={save.isPending}
               className="h-11 rounded-xl px-5 bg-brand text-brand-foreground hover:bg-brand/90 flex-1 sm:flex-none shadow-sm hover:shadow-md transition-all"
             >
               {!editing && <Plus className="size-4" />}
-              {editing ? "Save Changes" : "Save Agent"}
+              {save.isPending ? "Saving…" : editing ? "Save Changes" : "Save Agent"}
             </Button>
           </SheetFooter>
         </SheetContent>

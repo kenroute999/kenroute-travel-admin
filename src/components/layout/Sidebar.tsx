@@ -8,6 +8,7 @@ import {
   BarChart3,
   Armchair,
   UserCog,
+  Ticket,
   Plug,
   Settings,
   LogOut,
@@ -24,6 +25,7 @@ const items = [
   { title: "Reports", url: "/reports", icon: BarChart3 },
   { title: "Seat Layouts", url: "/seat-layouts", icon: Armchair },
   { title: "Drivers", url: "/drivers", icon: UserCog },
+  { title: "Conductors", url: "/conductors", icon: Ticket },
   { title: "OTA Integrations", url: "/integrations", icon: Plug },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
@@ -47,10 +49,7 @@ export function AppSidebar() {
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         {items.map((item) => {
-          const active =
-            item.url === "/"
-              ? pathname === "/"
-              : pathname.startsWith(item.url);
+          const active = item.url === "/" ? pathname === "/" : pathname.startsWith(item.url);
           return (
             <Link
               key={item.url}
