@@ -132,3 +132,38 @@ export const updateSchedule = (id: string, body: Partial<ScheduleInput>) =>
   api<Schedule>(`/schedules/${id}`, { method: "PATCH", body });
 
 export const deleteSchedule = (id: string) => api<void>(`/schedules/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------- seats of one trip (the Seat Layouts screen)
+
+/** One seat on a trip, with the ticket that holds it now (if any). */
+export interface TripSeat {
+  id: string;
+  seatNumber: string;
+  deck: "LOWER" | "UPPER";
+  row: number;
+  col: number;
+  seatType: string;
+  /** Decimal string. */
+  fare: string;
+  status: "AVAILABLE" | "HELD" | "BOOKED" | "BLOCKED";
+  booking: {
+    id: string;
+    pnr: string;
+    createdAt: string;
+    boardingPoint: string | null;
+    droppingPoint: string | null;
+    agent: { name: string } | null;
+    passenger: { name: string; gender: "MALE" | "FEMALE" | "OTHER" | null } | null;
+  } | null;
+}
+
+export const tripSeatsKey = (tripId: string) => ["schedules", tripId, "seats"] as const;
+
+export const listTripSeats = (tripId: string) =>
+  api<{ seats: TripSeat[] }>(`/schedules/${tripId}/seats`).then((r) => r.seats);
+
+export const setSeatBlocked = (tripId: string, seatId: string, blocked: boolean) =>
+  api<{ id: string; status: string }>(`/schedules/${tripId}/seats/${seatId}`, {
+    method: "PATCH",
+    body: { blocked },
+  });
