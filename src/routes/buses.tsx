@@ -51,7 +51,7 @@ export const Route = createFileRoute("/buses")({
   component: BusesPage,
 });
 
-type BusType = "Sleeper" | "Seater";
+type BusType = "Sleeper (2+1)" | "Seater (2+2)" | "Seater/Sleeper (2+1)";
 type ACType = "AC" | "Non-AC";
 type Status = "Active" | "Maintenance" | "Inactive";
 
@@ -61,17 +61,16 @@ interface BusRow {
   type: BusType;
   ac: ACType;
   seats: number;
-  op: string;
   status: Status;
   color: string;
 }
 
 const initialRows: BusRow[] = [
-  { no: "TS 09 AB 1234", name: "KenRoute Volvo", type: "Sleeper", ac: "AC", seats: 40, op: "KenRoute Travels", status: "Active", color: "text-emerald-500" },
-  { no: "TS 09 CD 5678", name: "KenRoute Scania", type: "Seater", ac: "AC", seats: 45, op: "KenRoute Travels", status: "Active", color: "text-slate-700" },
-  { no: "TS 09 EF 9101", name: "KenRoute Benz", type: "Sleeper", ac: "Non-AC", seats: 36, op: "KenRoute Travels", status: "Maintenance", color: "text-amber-500" },
-  { no: "TS 09 GH 1122", name: "KenRoute Starz", type: "Seater", ac: "AC", seats: 50, op: "KenRoute Travels", status: "Active", color: "text-sky-600" },
-  { no: "TS 09 IJ 3344", name: "KenRoute Deluxe", type: "Sleeper", ac: "AC", seats: 40, op: "KenRoute Travels", status: "Inactive", color: "text-rose-500" },
+  { no: "TS 09 AB 1234", name: "KenRoute Volvo", type: "Sleeper (2+1)", ac: "AC", seats: 40, status: "Active", color: "text-emerald-500" },
+  { no: "TS 09 CD 5678", name: "KenRoute Scania", type: "Seater (2+2)", ac: "AC", seats: 45, status: "Active", color: "text-slate-700" },
+  { no: "TS 09 EF 9101", name: "KenRoute Benz", type: "Sleeper (2+1)", ac: "Non-AC", seats: 36, status: "Maintenance", color: "text-amber-500" },
+  { no: "TS 09 GH 1122", name: "KenRoute Starz", type: "Seater/Sleeper (2+1)", ac: "AC", seats: 50, status: "Active", color: "text-sky-600" },
+  { no: "TS 09 IJ 3344", name: "KenRoute Deluxe", type: "Seater (2+2)", ac: "AC", seats: 40, status: "Inactive", color: "text-rose-500" },
 ];
 
 const statusStyles: Record<Status, string> = {
@@ -90,8 +89,9 @@ const statusDot: Record<Status, string> = {
 };
 
 const typeStyles: Record<BusType, string> = {
-  Sleeper: "bg-blue-50 text-blue-700 border border-blue-100",
-  Seater: "bg-violet-50 text-violet-700 border border-violet-100",
+  "Sleeper (2+1)": "bg-blue-50 text-blue-700 border border-blue-100",
+  "Seater (2+2)": "bg-violet-50 text-violet-700 border border-violet-100",
+  "Seater/Sleeper (2+1)": "bg-teal-50 text-teal-700 border border-teal-100",
 };
 
 const acStyles: Record<ACType, string> = {
@@ -158,8 +158,7 @@ function BusesPage() {
       const matchesQ =
         !q ||
         r.no.toLowerCase().includes(q) ||
-        r.name.toLowerCase().includes(q) ||
-        r.op.toLowerCase().includes(q);
+        r.name.toLowerCase().includes(q);
       const matchesT = typeFilter === "all" || r.type === typeFilter;
       const matchesS = statusFilter === "all" || r.status === statusFilter;
       return matchesQ && matchesT && matchesS;
@@ -196,7 +195,7 @@ function BusesPage() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search buses by number, name or operator…"
+              placeholder="Search buses by number or name…"
               className="w-full h-11 pl-10 pr-4 rounded-xl border border-border bg-background text-sm outline-none transition-all focus:border-brand focus:ring-2 focus:ring-brand/15"
             />
           </div>
@@ -209,8 +208,11 @@ function BusesPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="Sleeper">Sleeper</SelectItem>
-                  <SelectItem value="Seater">Seater</SelectItem>
+                  <SelectItem value="Sleeper (2+1)">Sleeper (2+1)</SelectItem>
+                  <SelectItem value="Seater (2+2)">Seater (2+2)</SelectItem>
+                  <SelectItem value="Seater/Sleeper (2+1)">
+                    Seater/Sleeper (2+1)
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -237,7 +239,6 @@ function BusesPage() {
                 <th className="px-6 py-3.5 font-semibold">Type</th>
                 <th className="px-6 py-3.5 font-semibold">AC</th>
                 <th className="px-6 py-3.5 font-semibold">Seats</th>
-                <th className="px-6 py-3.5 font-semibold">Operator</th>
                 <th className="px-6 py-3.5 font-semibold">Status</th>
                 <th className="px-6 py-3.5 font-semibold text-right">Actions</th>
               </tr>
@@ -246,7 +247,7 @@ function BusesPage() {
               {loading
                 ? Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i} className="border-t border-border">
-                      {Array.from({ length: 7 }).map((__, j) => (
+                      {Array.from({ length: 6 }).map((__, j) => (
                         <td key={j} className="px-6 py-4">
                           <Skeleton className="h-5 w-full max-w-[140px]" />
                         </td>
@@ -276,7 +277,6 @@ function BusesPage() {
                         <AcBadge ac={r.ac} />
                       </td>
                       <td className="px-6 py-4 font-medium">{r.seats}</td>
-                      <td className="px-6 py-4 text-muted-foreground">{r.op}</td>
                       <td className="px-6 py-4">
                         <StatusBadge status={r.status} />
                       </td>
@@ -366,10 +366,9 @@ function BusesPage() {
               handleSave({
                 no: String(fd.get("no") || ""),
                 name: String(fd.get("name") || ""),
-                type: (fd.get("type") as BusType) || "Sleeper",
+                type: (fd.get("type") as BusType) || "Sleeper (2+1)",
                 ac: (fd.get("ac") as ACType) || "AC",
                 seats: Number(fd.get("seats") || 0),
-                op: String(fd.get("op") || ""),
                 status: (fd.get("status") as Status) || "Active",
                 color: "text-brand",
               });
@@ -385,11 +384,14 @@ function BusesPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="Bus Type" required>
-                <Select name="type" defaultValue="Sleeper">
+                <Select name="type" defaultValue="Sleeper (2+1)">
                   <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Sleeper">Sleeper</SelectItem>
-                    <SelectItem value="Seater">Seater</SelectItem>
+                    <SelectItem value="Sleeper (2+1)">Sleeper (2+1)</SelectItem>
+                    <SelectItem value="Seater (2+2)">Seater (2+2)</SelectItem>
+                    <SelectItem value="Seater/Sleeper (2+1)">
+                      Seater/Sleeper (2+1)
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
@@ -410,15 +412,6 @@ function BusesPage() {
                 type="number"
                 min={1}
                 placeholder="Enter total seats"
-                required
-                className="h-11 rounded-xl"
-              />
-            </Field>
-            <Field label="Operator Name" required>
-              <Input
-                name="op"
-                placeholder="Enter operator name"
-                defaultValue="KenRoute Travels"
                 required
                 className="h-11 rounded-xl"
               />
