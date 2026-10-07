@@ -148,6 +148,8 @@ export interface TripSeat {
   status: "AVAILABLE" | "HELD" | "BOOKED" | "BLOCKED";
   /** A free seat beside a booked one is kept for a passenger of the same gender. */
   reservedFor: "MALE" | "FEMALE" | null;
+  /** The owner keeps this seat for women on this trip. */
+  ladiesOnly: boolean;
   booking: {
     id: string;
     pnr: string;
@@ -163,6 +165,12 @@ export const tripSeatsKey = (tripId: string) => ["schedules", tripId, "seats"] a
 
 export const listTripSeats = (tripId: string) =>
   api<{ seats: TripSeat[] }>(`/schedules/${tripId}/seats`).then((r) => r.seats);
+
+export const setSeatLadiesOnly = (tripId: string, seatId: string, ladiesOnly: boolean) =>
+  api<{ id: string; ladiesOnly: boolean }>(`/schedules/${tripId}/seats/${seatId}`, {
+    method: "PATCH",
+    body: { ladiesOnly },
+  });
 
 export const setSeatBlocked = (tripId: string, seatId: string, blocked: boolean) =>
   api<{ id: string; status: string }>(`/schedules/${tripId}/seats/${seatId}`, {

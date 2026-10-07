@@ -59,6 +59,8 @@ export function NewBookingSheet({
     queryKey: tripSeatsKey(tripId),
     queryFn: () => listTripSeats(tripId),
     enabled: open && !!trip,
+    // Seats sold elsewhere while this form is open turn booked by themselves.
+    refetchInterval: 5_000,
   });
   const allSeats = seatsQuery.data ?? [];
   const freeSeats = allSeats.filter((s) => s.status === "AVAILABLE");

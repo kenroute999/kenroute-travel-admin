@@ -43,6 +43,7 @@ import {
   listTripSeats,
   scheduleBusType,
   setSeatBlocked,
+  setSeatLadiesOnly,
   tripSeatsKey,
   type Schedule,
   type TripSeat,
@@ -77,6 +78,8 @@ interface Seat {
   price: number;
   /** Free, but kept for this gender because the seat beside it is taken. */
   reservedFor?: "male" | "female";
+  /** The owner keeps this seat for women on this trip. */
+  ladiesOnly?: boolean;
   passenger?: string;
   /** PNR of the ticket holding the seat. */
   bookingId?: string;
@@ -134,6 +137,7 @@ function toSeat(s: TripSeat): Seat {
     kind: s.seatType.includes("SLEEPER") ? "sleeper" : "seater",
     status,
     price: Number(s.fare),
+    ladiesOnly: s.ladiesOnly,
     ...(s.reservedFor && {
       reservedFor: s.reservedFor === "FEMALE" ? ("female" as const) : ("male" as const),
     }),
@@ -240,12 +244,12 @@ function SeatLayoutsPage() {
   const trip = trips.find((t) => t.id === pickedTrip) ?? trips[0];
   const tripId = trip?.id ?? "";
 
-  // Re-read every 10 seconds, so a seat an agent just sold turns booked here by itself.
+  // Re-read every 5 seconds, so a seat an agent just sold turns booked here by itself.
   const seatsQuery = useQuery({
     queryKey: tripSeatsKey(tripId),
     queryFn: () => listTripSeats(tripId),
     enabled: !!trip,
-    refetchInterval: 10_000,
+    refetchInterval: 5_000,
   });
   const seats = useMemo(() => (seatsQuery.data ?? []).map(toSeat), [seatsQuery.data]);
 
@@ -281,6 +285,26 @@ function SeatLayoutsPage() {
       refresh();
     },
   });
+  const ladiesMutation = useMutation({
+    mutationFn: (seat: Seat) => setSeatLadiesOnly(tripId, seat.id, !seat.ladiesOnly),
+    onSuccess: (_, seat) => {
+      toast.success(
+        seat.ladiesOnly
+          ? `Seat ${seat.label} is open to everyone`
+          : `Seat ${seat.label} is now for women only`,
+      );
+      refresh();
+    },
+    onError: (err) => {
+      toast.error(errorMessage(err));
+      refresh();
+    },
+  });
+  // Keep a free seat for women, or open it to everyone again.
+  const toggleLadies = (id: string) => {
+    const s = seats.find((x) => x.id === id);
+    if (s) ladiesMutation.mutate(s);
+  };
   const cancelMutation = useMutation({
     mutationFn: (seat: Seat) => cancelBooking(seat.ticketId!),
     onSuccess: (_, seat) => {
@@ -289,7 +313,7 @@ function SeatLayoutsPage() {
     },
     onError: (err) => toast.error(errorMessage(err)),
   });
-  const busy = blockMutation.isPending || cancelMutation.isPending;
+  const busy = blockMutation.isPending || cancelMutation.isPending || ladiesMutation.isPending;
 
   const stats = useMemo(() => {
     const total = seats.length;
@@ -630,6 +654,7 @@ function SeatLayoutsPage() {
             busy={busy}
             onToggleBlock={toggleBlock}
             onRelease={release}
+            onToggleLadies={toggleLadies}
             onClear={() => setSelected(null)}
           />
         </aside>
@@ -652,6 +677,7 @@ function SeatLayoutsPage() {
               busy={busy}
               onToggleBlock={toggleBlock}
               onRelease={release}
+              onToggleLadies={toggleLadies}
               onClear={() => setSelected(null)}
               embedded
             />
@@ -1050,6 +1076,7 @@ function SeatDetailsCard({
   busy,
   onToggleBlock,
   onRelease,
+  onToggleLadies,
   onClear,
   embedded,
 }: {
@@ -1059,6 +1086,7 @@ function SeatDetailsCard({
   busy: boolean;
   onToggleBlock: (id: string) => void;
   onRelease: (id: string) => void;
+  onToggleLadies: (id: string) => void;
   onClear: () => void;
   embedded?: boolean;
 }) {
@@ -1207,6 +1235,16 @@ function SeatDetailsCard({
             <X className="size-4" /> {sold ? "Cancel Ticket" : "Release Seat"}
           </Button>
         </div>
+
+        <Button
+          variant="outline"
+          className="w-full mt-2 gap-2"
+          disabled={busy || sold || seat.status === "blocked"}
+          onClick={() => onToggleLadies(seat.id)}
+        >
+          <Venus className="size-4" />
+          {seat.ladiesOnly ? "Open to Everyone" : "Keep for Women Only"}
+        </Button>
 
         {sold && (
           <Button asChild variant="outline" className="w-full mt-2 gap-2">
