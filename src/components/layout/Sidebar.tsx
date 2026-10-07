@@ -16,6 +16,7 @@ import {
 import logo from "@/assets/kenroute-logo.png";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/api/client";
+import { useSession } from "@/lib/session";
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -35,6 +36,9 @@ export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
 
+  const { session } = useSession();
+  const company = session?.user.operatorName?.trim();
+
   async function handleLogout() {
     await signOut();
     await navigate({ to: "/login", replace: true });
@@ -47,8 +51,15 @@ export function AppSidebar() {
           <img src={logo} alt="KenRoute" className="size-full object-contain" />
         </div>
         <div className="leading-tight">
-          <div className="font-bold tracking-tight text-base">
-            Ken<span className="text-brand">Route</span>
+          <div
+            className="font-bold tracking-tight text-base truncate max-w-[10.5rem]"
+            title={company}
+          >
+            {company || (
+              <>
+                Ken<span className="text-brand">Route</span>
+              </>
+            )}
           </div>
           <div className="text-[11px] text-white/50">Travel Operations</div>
         </div>
@@ -76,6 +87,10 @@ export function AppSidebar() {
       </nav>
 
       <div className="p-3 border-t border-sidebar-border">
+        <div className="px-3 pb-2 text-[11px] text-white/40">
+          Provided by <span className="font-semibold text-white/70">Ken</span>
+          <span className="font-semibold text-brand">Route</span>
+        </div>
         <button
           type="button"
           onClick={handleLogout}

@@ -34,6 +34,8 @@ export type AuthUser = {
   email: string;
   name?: string;
   operatorId?: string;
+  /** The bus company this account belongs to, shown in the side bar. */
+  operatorName?: string;
   /** Backend role claim. Admin app accepts OWNER / ADMIN only. */
   role: string;
 };
@@ -113,7 +115,7 @@ function parseTokens(data: unknown): AuthTokens | null {
 
 function parseUser(data: unknown): AuthUser | null {
   if (!isRecord(data)) return null;
-  const { id, userId, email, name, operatorId, role } = data;
+  const { id, userId, email, name, operatorId, operatorName, role } = data;
   const resolvedId = typeof id === "string" ? id : typeof userId === "string" ? userId : null;
   if (!resolvedId || typeof email !== "string" || typeof role !== "string") return null;
   return {
@@ -121,6 +123,7 @@ function parseUser(data: unknown): AuthUser | null {
     email,
     name: typeof name === "string" ? name : undefined,
     operatorId: typeof operatorId === "string" ? operatorId : undefined,
+    operatorName: typeof operatorName === "string" ? operatorName : undefined,
     role,
   };
 }
