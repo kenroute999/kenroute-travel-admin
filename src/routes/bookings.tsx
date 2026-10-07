@@ -99,6 +99,11 @@ interface Booking {
   amount: number;
   payment: PaymentStatus;
   status: BookingStatus;
+  /** Set by the conductor's app. A separate fact from the status; "-" once the ticket is cancelled. */
+  boarded: "Boarded" | "Not boarded" | "-";
+  /** "07 Oct, 05:31 PM" in India time; empty unless boarded. */
+  boardedAt: string;
+  boardedBy: string;
   initials: string;
   avatarTone: string;
   /** The booking in the database. */
@@ -176,6 +181,23 @@ function toRow(b: OwnerBooking): Booking {
     amount: Number(b.fare),
     payment: b.status === "REFUNDED" ? "Refunded" : "Paid",
     status: STATUS_FROM_API[b.status],
+    boarded:
+      b.status === "CANCELLED" || b.status === "REFUNDED"
+        ? "-"
+        : b.passenger?.boarded
+          ? "Boarded"
+          : "Not boarded",
+    boardedAt: b.passenger?.boardedAt
+      ? new Date(b.passenger.boardedAt).toLocaleString("en-IN", {
+          timeZone: "Asia/Kolkata",
+          day: "2-digit",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        })
+      : "",
+    boardedBy: b.passenger?.boardedBy ?? "",
     initials: name
       .split(" ")
       .map((part) => part[0] ?? "")
@@ -279,6 +301,30 @@ function StatusBadge({ status }: { status: BookingStatus }) {
     </span>
   );
 }
+function BoardedBadge({ row }: { row: Booking }) {
+  if (row.boarded === "-") return <span className="text-muted-foreground">-</span>;
+  const on = row.boarded === "Boarded";
+  return (
+    <div>
+      <span
+        className={cn(
+          "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium whitespace-nowrap",
+          on
+            ? "bg-success/15 text-success border-success/25"
+            : "bg-muted text-muted-foreground border-border",
+        )}
+      >
+        {row.boarded}
+      </span>
+      {on && row.boardedAt && (
+        <div className="mt-1 text-[11px] text-muted-foreground whitespace-nowrap">
+          {row.boardedAt}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PaymentBadge({ status }: { status: PaymentStatus }) {
   return (
     <span
@@ -303,6 +349,7 @@ function BookingsPage() {
   const [routeFilter, setRouteFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
+  const [boardedFilter, setBoardedFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
   const [selected, setSelected] = useState<Booking | null>(null);
@@ -382,6 +429,9 @@ function BookingsPage() {
         "Amount",
         "Payment",
         "Status",
+        "Boarded",
+        "Boarded At",
+        "Boarded By",
       ],
       filtered.map((r) => [
         r.id,
@@ -401,6 +451,9 @@ function BookingsPage() {
         r.amount,
         r.payment,
         r.status,
+        r.boarded,
+        r.boardedAt,
+        r.boardedBy,
       ]),
     );
 
@@ -424,11 +477,21 @@ function BookingsPage() {
       const matchesR = routeFilter === "all" || `${r.from} → ${r.to}` === routeFilter;
       const matchesS = statusFilter === "all" || r.status === statusFilter;
       const matchesP = paymentFilter === "all" || r.payment === paymentFilter;
+      const matchesB = boardedFilter === "all" || r.boarded === boardedFilter;
       const matchesSrc = sourceFilter === "all" || r.source === sourceFilter;
       const matchesD = dateFilter === "all" || r.journey === dateFilter;
-      return matchesQ && matchesR && matchesS && matchesP && matchesSrc && matchesD;
+      return matchesQ && matchesR && matchesS && matchesP && matchesB && matchesSrc && matchesD;
     });
-  }, [rows, query, routeFilter, statusFilter, paymentFilter, sourceFilter, dateFilter]);
+  }, [
+    rows,
+    query,
+    routeFilter,
+    statusFilter,
+    paymentFilter,
+    boardedFilter,
+    sourceFilter,
+    dateFilter,
+  ]);
 
   return (
     <>
@@ -715,6 +778,16 @@ function BookingsPage() {
                 <SelectItem value="Failed">Failed</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={boardedFilter} onValueChange={setBoardedFilter}>
+              <SelectTrigger className="h-11 w-[150px] rounded-xl bg-background">
+                <SelectValue placeholder="Boarded" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Boarding</SelectItem>
+                <SelectItem value="Boarded">Boarded</SelectItem>
+                <SelectItem value="Not boarded">Not boarded</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -728,12 +801,13 @@ function BookingsPage() {
                 <th className="px-5 py-3.5 font-semibold">Passenger</th>
                 <th className="px-5 py-3.5 font-semibold">Mobile</th>
                 <th className="px-5 py-3.5 font-semibold">Route</th>
-                <th className="px-5 py-3.5 font-semibold">Boarding</th>
+                <th className="px-5 py-3.5 font-semibold">Boarding Point</th>
                 <th className="px-5 py-3.5 font-semibold">Seat</th>
                 <th className="px-5 py-3.5 font-semibold">Journey</th>
                 <th className="px-5 py-3.5 font-semibold">Amount</th>
                 <th className="px-5 py-3.5 font-semibold">Payment</th>
                 <th className="px-5 py-3.5 font-semibold">Status</th>
+                <th className="px-5 py-3.5 font-semibold">Boarded</th>
                 <th className="px-5 py-3.5 font-semibold text-right">Actions</th>
               </tr>
             </thead>
@@ -741,7 +815,7 @@ function BookingsPage() {
               {loading
                 ? Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i} className="border-t border-border">
-                      {Array.from({ length: 12 }).map((__, j) => (
+                      {Array.from({ length: 13 }).map((__, j) => (
                         <td key={j} className="px-5 py-4">
                           <Skeleton className="h-5 w-full max-w-[120px]" />
                         </td>
@@ -819,6 +893,9 @@ function BookingsPage() {
                         <StatusBadge status={r.status} />
                       </td>
                       <td className="px-5 py-4">
+                        <BoardedBadge row={r} />
+                      </td>
+                      <td className="px-5 py-4">
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => setSelected(r)}
@@ -848,7 +925,7 @@ function BookingsPage() {
                   ))}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="px-6 py-16 text-center text-muted-foreground">
+                  <td colSpan={13} className="px-6 py-16 text-center text-muted-foreground">
                     <Ticket className="size-10 mx-auto mb-2 opacity-40" />
                     No bookings match your filters.
                   </td>
@@ -969,6 +1046,16 @@ function BookingsPage() {
                   <Row label="Gender" value={selected.gender} />
                   <Row label="Age" value={`${selected.age} Years`} />
                   <Row label="ID Proof" value={selected.idProof} />
+                  {selected.boarded !== "-" && (
+                    <Row
+                      label="Boarding"
+                      value={
+                        selected.boarded === "Boarded"
+                          ? `Boarded at ${selected.boardedAt || "time not recorded"}${selected.boardedBy ? ` by ${selected.boardedBy}` : ""}`
+                          : "Not boarded"
+                      }
+                    />
+                  )}
                 </div>
               </div>
 
