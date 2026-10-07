@@ -340,7 +340,12 @@ function PaymentBadge({ status }: { status: PaymentStatus }) {
 
 function BookingsPage() {
   const queryClient = useQueryClient();
-  const bookingsQuery = useQuery({ queryKey: bookingsKey, queryFn: listBookings });
+  // Re-read every 15 seconds, so a ticket an agent sells or a conductor boards shows up by itself.
+  const bookingsQuery = useQuery({
+    queryKey: bookingsKey,
+    queryFn: listBookings,
+    refetchInterval: 15_000,
+  });
   const schedulesQuery = useQuery({ queryKey: fleetKeys.schedules, queryFn: listSchedules });
   const rows = useMemo(() => (bookingsQuery.data ?? []).map(toRow), [bookingsQuery.data]);
   const loading = bookingsQuery.isPending;
