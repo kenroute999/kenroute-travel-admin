@@ -29,6 +29,9 @@ export interface OwnerBooking {
     phone: string;
     idProofType: string | null;
     boarded: boolean;
+    /** When the conductor boarded them (ISO time), and that conductor's name. */
+    boardedAt: string | null;
+    boardedBy: string | null;
   } | null;
 }
 
