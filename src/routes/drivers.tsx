@@ -23,7 +23,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { NONE, TripAssignment } from "@/components/staff/TripAssignment";
 import { errorMessage } from "@/lib/api/client";
+import { formatDateTime } from "@/lib/api/conductors";
 import {
   createDriver,
   deleteDriver,
@@ -58,8 +60,15 @@ function DriversPage() {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Driver | null>(null);
+  // The bus follows the chosen trip, so these two are controlled together.
+  const [assigned, setAssigned] = useState({ busId: NONE, tripId: NONE });
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: driverKeys.list });
+  const refresh = () => {
+    // Trip lists and the Buses page show who is assigned, so they are stale too.
+    queryClient.invalidateQueries({ queryKey: ["trips"] });
+    queryClient.invalidateQueries({ queryKey: ["buses"] });
+    return queryClient.invalidateQueries({ queryKey: driverKeys.list });
+  };
 
   const save = useMutation({
     mutationFn: (fd: FormData) => {
@@ -69,6 +78,7 @@ function DriversPage() {
         phone: String(fd.get("phone")).trim(),
         experienceYears: Number(fd.get("experience")),
         isActive: fd.get("status") !== "Inactive",
+        tripId: assigned.tripId === NONE ? null : assigned.tripId,
       };
       return editing ? updateDriver(editing.id, fields) : createDriver(fields);
     },
@@ -102,11 +112,13 @@ function DriversPage() {
 
   const openAdd = () => {
     setEditing(null);
+    setAssigned({ busId: NONE, tripId: NONE });
     setOpen(true);
   };
 
   const openEdit = (row: Driver) => {
     setEditing(row);
+    setAssigned({ busId: row.trip?.bus.id ?? NONE, tripId: row.trip?.id ?? NONE });
     setOpen(true);
   };
 
@@ -148,6 +160,8 @@ function DriversPage() {
                 <th className="px-6 py-3 font-medium">License No.</th>
                 <th className="px-6 py-3 font-medium">Phone</th>
                 <th className="px-6 py-3 font-medium">Experience</th>
+                <th className="px-6 py-3 font-medium">Assigned Bus</th>
+                <th className="px-6 py-3 font-medium">Assigned Route &amp; Time</th>
                 <th className="px-6 py-3 font-medium">Status</th>
                 <th className="px-6 py-3 font-medium text-right">Actions</th>
               </tr>
@@ -161,6 +175,26 @@ function DriversPage() {
                   <td className="px-6 py-4">
                     {r.experienceYears} {r.experienceYears === 1 ? "yr" : "yrs"}
                   </td>
+                  {r.trip ? (
+                    <>
+                      <td className="px-6 py-4">
+                        <div className="font-medium">{r.trip.bus.registrationNo}</div>
+                        <div className="text-xs text-muted-foreground">{r.trip.bus.name}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div>
+                          {r.trip.route.origin} → {r.trip.route.destination}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatDateTime(r.trip.departureAt)}
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    <td colSpan={2} className="px-6 py-4 text-muted-foreground">
+                      Not assigned
+                    </td>
+                  )}
                   <td className="px-6 py-4">
                     <StatusPill status={r.isActive ? "Active" : "Inactive"} />
                   </td>
@@ -187,7 +221,7 @@ function DriversPage() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-6 py-16 text-center text-muted-foreground">
                     <UserCog className="size-10 mx-auto mb-2 opacity-40" />
                     {isPending
                       ? "Loading drivers…"
@@ -212,8 +246,8 @@ function DriversPage() {
             </SheetTitle>
             <SheetDescription>
               {editing
-                ? "Update the driver's details"
-                : "Enter driver details to add to your staff"}
+                ? "Update the driver's details and assign a route, time and bus"
+                : "Enter driver details and assign a route, time and bus"}
             </SheetDescription>
           </SheetHeader>
 
@@ -291,6 +325,15 @@ function DriversPage() {
                 </Select>
               </Field>
             </div>
+
+            <TripAssignment
+              role="driver"
+              selfId={editing?.id}
+              current={editing?.trip ?? null}
+              busId={assigned.busId}
+              tripId={assigned.tripId}
+              onChange={setAssigned}
+            />
           </form>
 
           <SheetFooter className="p-6 border-t border-border bg-muted/20 flex-row gap-3 sm:justify-end">

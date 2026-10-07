@@ -23,15 +23,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { NONE, TripAssignment } from "@/components/staff/TripAssignment";
 import { errorMessage } from "@/lib/api/client";
 import {
   conductorKeys,
   createConductor,
   deleteConductor,
   formatDateTime,
-  listBusOptions,
   listConductors,
-  listUpcomingTrips,
   updateConductor,
   type Conductor,
 } from "@/lib/api/conductors";
@@ -46,9 +45,6 @@ export const Route = createFileRoute("/conductors")({
   component: ConductorsPage,
 });
 
-// Radix Select cannot hold an empty value, so "no assignment" needs its own token.
-const NONE = "none";
-
 function ConductorsPage() {
   const queryClient = useQueryClient();
   const {
@@ -62,32 +58,23 @@ function ConductorsPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Conductor | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  // The trip list depends on the bus, so these two are controlled.
-  const [busId, setBusId] = useState(NONE);
-  const [tripId, setTripId] = useState(NONE);
-
-  // Only needed by the edit form, so only fetched once it is open.
-  const assigning = open && editing !== null;
-  const { data: buses = [] } = useQuery({
-    queryKey: conductorKeys.buses,
-    queryFn: listBusOptions,
-    enabled: assigning,
-  });
-  const { data: trips = [], isFetching: tripsLoading } = useQuery({
-    queryKey: conductorKeys.trips(busId),
-    queryFn: () => listUpcomingTrips(busId),
-    enabled: assigning && busId !== NONE,
-  });
+  // The bus follows the chosen trip, so these two are controlled together.
+  const [assigned, setAssigned] = useState({ busId: NONE, tripId: NONE });
+  const tripId = assigned.tripId;
 
   const save = useMutation({
-    mutationFn: (fd: FormData) => {
+    mutationFn: async (fd: FormData) => {
       const password = String(fd.get("password"));
       const fields = {
         name: String(fd.get("name")).trim(),
         phone: String(fd.get("phone")).trim(),
         isActive: fd.get("status") !== "Inactive",
       };
-      if (!editing) return createConductor({ ...fields, password });
+      if (!editing) {
+        // The login is created first; the trip is then given like any later change.
+        const created = await createConductor({ ...fields, password });
+        return tripId === NONE ? created : updateConductor(created.id, { tripId });
+      }
       return updateConductor(editing.id, {
         ...fields,
         ...(password && { password }),
@@ -97,8 +84,9 @@ function ConductorsPage() {
     onSuccess: () => {
       toast.success(editing ? "Conductor updated" : "Conductor added");
       setOpen(false);
-      // Trip lists show who is assigned, so they are stale too.
+      // Trip lists and the Buses page show who is assigned, so they are stale too.
       queryClient.invalidateQueries({ queryKey: ["trips"] });
+      queryClient.invalidateQueries({ queryKey: ["buses"] });
       return queryClient.invalidateQueries({ queryKey: conductorKeys.list });
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -109,6 +97,7 @@ function ConductorsPage() {
     onSuccess: () => {
       toast.success("Conductor deleted");
       queryClient.invalidateQueries({ queryKey: ["trips"] });
+      queryClient.invalidateQueries({ queryKey: ["buses"] });
       return queryClient.invalidateQueries({ queryKey: conductorKeys.list });
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -122,14 +111,14 @@ function ConductorsPage() {
 
   const openAdd = () => {
     setEditing(null);
+    setAssigned({ busId: NONE, tripId: NONE });
     setShowPassword(false);
     setOpen(true);
   };
 
   const openEdit = (row: Conductor) => {
     setEditing(row);
-    setBusId(row.trip?.bus.id ?? NONE);
-    setTripId(row.trip?.id ?? NONE);
+    setAssigned({ busId: row.trip?.bus.id ?? NONE, tripId: row.trip?.id ?? NONE });
     setShowPassword(false);
     setOpen(true);
   };
@@ -137,15 +126,6 @@ function ConductorsPage() {
   const handleDelete = (row: Conductor) => {
     if (window.confirm(`Delete conductor "${row.name}"?`)) remove.mutate(row.id);
   };
-
-  const tripHint =
-    busId === NONE
-      ? "Choose a bus first."
-      : tripsLoading
-        ? "Loading trips…"
-        : trips.length === 0
-          ? "This bus has no upcoming trips."
-          : undefined;
 
   return (
     <>
@@ -263,8 +243,8 @@ function ConductorsPage() {
             </SheetTitle>
             <SheetDescription>
               {editing
-                ? "Update details and assign a bus, route and trip time"
-                : "Create the conductor's login and share the password with them"}
+                ? "Update details and assign a route, time and bus"
+                : "Create the conductor's login, share the password, and assign a trip"}
             </SheetDescription>
           </SheetHeader>
 
@@ -336,71 +316,14 @@ function ConductorsPage() {
               </div>
             </Field>
 
-            {editing && (
-              <>
-                <Field
-                  label="Assigned Bus"
-                  hint={buses.length === 0 ? "No buses saved yet." : undefined}
-                >
-                  <Select
-                    value={busId}
-                    onValueChange={(value) => {
-                      setBusId(value);
-                      // Trips belong to one bus, so the old choice no longer applies.
-                      setTripId(NONE);
-                    }}
-                  >
-                    <SelectTrigger className="h-11 rounded-xl">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NONE}>Not assigned</SelectItem>
-                      {/* Keeps the current choice visible while the list is still loading. */}
-                      {editing.trip && !buses.some((b) => b.id === editing.trip?.bus.id) && (
-                        <SelectItem value={editing.trip.bus.id}>
-                          {editing.trip.bus.registrationNo}
-                        </SelectItem>
-                      )}
-                      {buses.map((b) => (
-                        <SelectItem key={b.id} value={b.id}>
-                          {b.registrationNo}
-                          {b.name ? ` — ${b.name}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label="Assigned Route, Date & Time" hint={tripHint}>
-                  <Select value={tripId} onValueChange={setTripId} disabled={busId === NONE}>
-                    <SelectTrigger className="h-auto min-h-11 rounded-xl py-2 text-left">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NONE}>Not assigned</SelectItem>
-                      {editing.trip &&
-                        editing.trip.bus.id === busId &&
-                        !trips.some((t) => t.id === editing.trip?.id) && (
-                          <SelectItem value={editing.trip.id}>
-                            {editing.trip.route.origin} → {editing.trip.route.destination} ·{" "}
-                            {formatDateTime(editing.trip.departureAt)}
-                          </SelectItem>
-                        )}
-                      {trips.map((t) => {
-                        const takenBy =
-                          t.conductor && t.conductor.id !== editing.id ? t.conductor.name : null;
-                        return (
-                          <SelectItem key={t.id} value={t.id} disabled={takenBy !== null}>
-                            {t.route.origin} → {t.route.destination} ·{" "}
-                            {formatDateTime(t.departureAt)}
-                            {takenBy ? ` (assigned to ${takenBy})` : ""}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </>
-            )}
+            <TripAssignment
+              role="conductor"
+              selfId={editing?.id}
+              current={editing?.trip ?? null}
+              busId={assigned.busId}
+              tripId={assigned.tripId}
+              onChange={setAssigned}
+            />
 
             <Field label="Status" required>
               <Select
