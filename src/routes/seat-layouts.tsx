@@ -39,7 +39,6 @@ import { errorMessage } from "@/lib/api/client";
 import { bookingsKey, cancelBooking } from "@/lib/api/bookings";
 import {
   fleetKeys,
-  listBuses,
   listSchedules,
   listTripSeats,
   scheduleBusType,
@@ -245,8 +244,6 @@ function SeatLayoutsPage() {
   }, [schedulesQuery.data]);
   const trip = trips.find((t) => t.id === pickedTrip) ?? trips[0];
   const tripId = trip?.id ?? "";
-  const busesQuery = useQuery({ queryKey: fleetKeys.buses, queryFn: listBuses });
-  const tripBus = busesQuery.data?.find((b) => b.id === trip?.bus?.id);
 
   // Re-read every 5 seconds, so a seat an agent just sold turns booked here by itself.
   const seatsQuery = useQuery({
@@ -342,26 +339,8 @@ function SeatLayoutsPage() {
   // All seats of the current deck (filter only dims, so the layout keeps its shape)
   const deckSeats = seats.filter((s) => s.deck === deck);
 
-  // If the current trip's bus is a Sleeper with the L19 back berth (37 total seats),
-  // add it as a lower-deck sleeper at the last row, centered in the middle of both sides.
-  const backBerthEnabled =
-    (trip?.bus?.seating === "SLEEPER" || trip?.bus?.seating === "SLEEPER_BACK") &&
-    (tripBus?.seats ?? 0) === 37;
-  const backSeat: Seat | null =
-    backBerthEnabled && arrangement === "2-1" && deck === "lower"
-      ? {
-          id: "__back-berth__",
-          label: "L19",
-          row: 999,
-          col: AISLE_COL,
-          deck: "lower",
-          kind: "sleeper",
-          status: "available",
-          price: Number(trip?.fare ?? 0),
-          gender: "Any",
-        }
-      : null;
-  const displaySeats: Seat[] = backSeat ? [...deckSeats, backSeat] : deckSeats;
+  // A 37-seat sleeper's back bed (L19) is a real seat from the database: it sits in the
+  // aisle column behind the last row, and SeatGrid draws it centred at the back.
 
   const selectedSeat = seats.find((s) => s.id === selected) ?? null;
 
@@ -584,7 +563,7 @@ function SeatLayoutsPage() {
 
                     {/* Seats grid */}
                     <SeatGrid
-                      seats={displaySeats}
+                      seats={deckSeats}
                       deck={deck}
                       arrangement={arrangement}
                       statusFilter={statusFilter}
@@ -1218,7 +1197,7 @@ function SeatDetailsCard({
       return seat.col < AISLE_COL_22 ? "Left pair" : "Right pair";
     }
     if (seat.col === SINGLE_COL) return "Single side";
-    if (seat.col === AISLE_COL) return "Back bench";
+    if (seat.col === AISLE_COL) return seat.kind === "sleeper" ? "Back bed" : "Back bench";
     return "Double side";
   })();
 
