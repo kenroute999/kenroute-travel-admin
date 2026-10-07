@@ -37,23 +37,11 @@ interface ApiBus {
   seating: Seating;
   status: ApiStatus;
   seats: number;
-  upcomingTrips?: BusTripStaff[];
-}
-
-/** Who is on the bus for one of its upcoming trips. */
-export interface BusTripStaff {
-  id: string;
-  departureAt: string;
-  route: { origin: string; destination: string };
-  driver: { id: string; name: string; phone: string; licenseNo: string } | null;
-  conductor: { id: string; name: string; phone: string } | null;
 }
 
 /** A bus from the database, in the shape the screens already use. */
 export interface FleetBus extends Bus {
   id: string;
-  /** Its next few trips, soonest first, with the driver and conductor of each. */
-  upcomingTrips: BusTripStaff[];
 }
 
 export type BusInput = Omit<Bus, "color"> & { seatingOverride?: Seating };
@@ -69,7 +57,6 @@ function toFleetBus(b: ApiBus): FleetBus {
     seats: b.seats,
     status,
     color: COLOR_OF[status],
-    upcomingTrips: b.upcomingTrips ?? [],
   };
 }
 

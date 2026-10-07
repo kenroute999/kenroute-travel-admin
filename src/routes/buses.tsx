@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Eye,
   Filter,
   Pencil,
   Plus,
@@ -29,13 +28,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -49,7 +41,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { type BusType, type ACType, type BusStatus as Status } from "@/lib/buses";
 import { errorMessage } from "@/lib/api/client";
-import { formatDateTime } from "@/lib/api/conductors";
 import {
   createBus,
   deleteBus,
@@ -158,7 +149,6 @@ function BusesPage() {
   const rows = useMemo(() => busesQuery.data ?? [], [busesQuery.data]);
   const loading = busesQuery.isPending;
   const [editing, setEditing] = useState<BusRow | null>(null);
-  const [staffOf, setStaffOf] = useState<BusRow | null>(null);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -286,7 +276,6 @@ function BusesPage() {
                 <th className="px-6 py-3.5 font-semibold">AC</th>
                 <th className="px-6 py-3.5 font-semibold">Seats</th>
                 <th className="px-6 py-3.5 font-semibold">Status</th>
-                <th className="px-6 py-3.5 font-semibold">Staff</th>
                 <th className="px-6 py-3.5 font-semibold text-right">Actions</th>
               </tr>
             </thead>
@@ -294,7 +283,7 @@ function BusesPage() {
               {loading
                 ? Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i} className="border-t border-border">
-                      {Array.from({ length: 7 }).map((__, j) => (
+                      {Array.from({ length: 6 }).map((__, j) => (
                         <td key={j} className="px-6 py-4">
                           <Skeleton className="h-5 w-full max-w-[140px]" />
                         </td>
@@ -326,16 +315,6 @@ function BusesPage() {
                       <td className="px-6 py-4 font-medium">{r.seats}</td>
                       <td className="px-6 py-4">
                         <StatusBadge status={r.status} />
-                      </td>
-                      <td className="px-6 py-4">
-                        <button
-                          aria-label={`Driver and conductor of ${r.no}`}
-                          title="Driver and conductor"
-                          onClick={() => setStaffOf(r)}
-                          className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-brand/10 hover:text-brand transition-all hover:scale-110"
-                        >
-                          <Eye className="size-4" />
-                        </button>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-1">
@@ -573,65 +552,6 @@ function BusesPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
-
-      {/* Driver and conductor of the bus, trip by trip: staff change from one trip to the next. */}
-      <Dialog open={staffOf !== null} onOpenChange={(o) => !o && setStaffOf(null)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Staff · {staffOf?.no}</DialogTitle>
-            <DialogDescription>
-              Driver and conductor for the upcoming trips of this bus.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 max-h-[60vh] overflow-y-auto">
-            {staffOf?.upcomingTrips.length === 0 && (
-              <p className="text-sm text-muted-foreground py-6 text-center">
-                This bus has no upcoming trips. Add one on the Routes page, then assign a driver and
-                a conductor.
-              </p>
-            )}
-            {staffOf?.upcomingTrips.map((t) => (
-              <div key={t.id} className="rounded-xl border border-border p-4">
-                <div className="font-semibold">
-                  {t.route.origin} → {t.route.destination}
-                </div>
-                <div className="text-xs text-muted-foreground">{formatDateTime(t.departureAt)}</div>
-                <div className="mt-3 grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Driver
-                    </div>
-                    {t.driver ? (
-                      <>
-                        <div className="font-medium">{t.driver.name}</div>
-                        <div className="text-muted-foreground">{t.driver.phone}</div>
-                        <div className="text-xs text-muted-foreground">
-                          Licence {t.driver.licenseNo}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="text-muted-foreground">Not assigned</div>
-                    )}
-                  </div>
-                  <div>
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Conductor
-                    </div>
-                    {t.conductor ? (
-                      <>
-                        <div className="font-medium">{t.conductor.name}</div>
-                        <div className="text-muted-foreground">{t.conductor.phone}</div>
-                      </>
-                    ) : (
-                      <div className="text-muted-foreground">Not assigned</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
