@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
-import { cn } from "@/lib/utils";
+import { BusSeatMap } from "@/components/bookings/BusSeatMap";
 import { errorMessage } from "@/lib/api/client";
 import { bookingsKey, createBooking, ID_PROOFS, type NewBooking } from "@/lib/api/bookings";
 import { fleetKeys, listSchedules, listTripSeats, tripSeatsKey } from "@/lib/api/fleet";
@@ -141,7 +141,7 @@ export function NewBookingSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-md flex flex-col p-0 gap-0">
+      <SheetContent className="w-full sm:max-w-xl flex flex-col p-0 gap-0">
         <SheetHeader className="p-5 border-b">
           <SheetTitle>New Booking</SheetTitle>
         </SheetHeader>
@@ -190,57 +190,19 @@ export function NewBookingSheet({
                 ? "Choose a trip first"
                 : seatsQuery.isLoading
                   ? "Loading…"
-                  : `${freeSeats.length} of ${allSeats.length} seats free. Grey seats are already booked.`}
+                  : `${freeSeats.length} of ${allSeats.length} seats free. Blue = booked by a man, pink = booked by a woman, grey = blocked.`}
             </p>
             {(["LOWER", "UPPER"] as const).map((deck) => {
               const onDeck = allSeats.filter((s) => s.deck === deck);
               if (onDeck.length === 0) return null;
               return (
-                <div key={deck}>
-                  <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                    {deck === "UPPER" ? "Upper deck" : "Lower deck"}
-                  </p>
-                  <div className="grid grid-cols-6 gap-1.5">
-                    {onDeck.map((s) => {
-                      const free = s.status === "AVAILABLE";
-                      const picked = s.id === form.seatId;
-                      const only =
-                        s.reservedFor === "FEMALE"
-                          ? "Female only"
-                          : s.reservedFor
-                            ? "Male only"
-                            : "";
-                      return (
-                        <button
-                          key={s.id}
-                          type="button"
-                          disabled={!free}
-                          aria-pressed={picked}
-                          title={
-                            free
-                              ? `Seat ${s.seatNumber} · ₹${Number(s.fare).toLocaleString("en-IN")}${only && ` · ${only}`}`
-                              : `Seat ${s.seatNumber} · ${s.status === "BOOKED" ? "Booked" : "Blocked"}`
-                          }
-                          onClick={() => set({ seatId: picked ? "" : s.id })}
-                          className={cn(
-                            "h-9 rounded-md border text-xs font-semibold transition",
-                            picked
-                              ? "border-brand bg-brand text-brand-foreground"
-                              : !free
-                                ? "cursor-not-allowed border-border bg-muted text-muted-foreground/60 line-through"
-                                : s.reservedFor === "FEMALE"
-                                  ? "border-dashed border-pink-400 bg-pink-50 text-pink-600 hover:bg-pink-100"
-                                  : s.reservedFor === "MALE"
-                                    ? "border-dashed border-blue-400 bg-blue-50 text-blue-600 hover:bg-blue-100"
-                                    : "border-success/40 bg-success/10 text-success hover:bg-success/20",
-                          )}
-                        >
-                          {s.seatNumber}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                <BusSeatMap
+                  key={deck}
+                  deckLabel={deck === "UPPER" ? "Upper deck" : "Lower deck"}
+                  seats={onDeck}
+                  selectedId={form.seatId}
+                  onPick={(seatId) => set({ seatId })}
+                />
               );
             })}
           </Field>

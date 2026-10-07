@@ -136,6 +136,13 @@
 
 /* Printing a ticket: when a page marks one with .print-area, print only that. */
 @media print {
+  /* Hidden content still takes up room, so the long page behind the ticket would print
+     as extra pages (with the ticket repeated on each). Cut the document to one page. */
+  html:has(.print-area),
+  body:has(.print-area) {
+    height: 100vh !important;
+    overflow: hidden !important;
+  }
   body:has(.print-area) * {
     visibility: hidden;
   }
