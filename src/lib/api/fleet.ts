@@ -3,13 +3,15 @@ import { api } from "./client";
 
 // ---------------------------------------------------------------- buses
 
-type Seating = "SLEEPER" | "SEATER" | "SEATER_SLEEPER";
+export type Seating = "SLEEPER" | "SEATER" | "SEATER_SLEEPER" | "SLEEPER_BACK";
 type ApiStatus = "ACTIVE" | "MAINTENANCE" | "INACTIVE";
 
 const TYPE_OF: Record<Seating, BusType> = {
   SLEEPER: "Sleeper (2+1)",
   SEATER: "Seater (2+2)",
   SEATER_SLEEPER: "Seater/Sleeper (2+1)",
+  // A back-berth sleeper is still presented as a plain Sleeper (2+1) in the fleet.
+  SLEEPER_BACK: "Sleeper (2+1)",
 };
 const SEATING_OF: Record<BusType, Seating> = {
   "Sleeper (2+1)": "SLEEPER",
@@ -42,7 +44,7 @@ export interface FleetBus extends Bus {
   id: string;
 }
 
-export type BusInput = Omit<Bus, "color">;
+export type BusInput = Omit<Bus, "color"> & { seatingOverride?: Seating };
 
 function toFleetBus(b: ApiBus): FleetBus {
   const status = STATUS_OF[b.status];
@@ -62,7 +64,7 @@ function toApiBus(b: BusInput) {
   return {
     registrationNo: b.no,
     name: b.name,
-    seating: SEATING_OF[b.type],
+    seating: b.seatingOverride ?? SEATING_OF[b.type],
     isAc: (b.ac satisfies ACType) === "AC",
     seats: b.seats,
     status: b.status.toUpperCase(),

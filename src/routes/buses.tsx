@@ -136,6 +136,13 @@ const SEATS_BY_TYPE: Record<BusType, number> = {
   "Seater/Sleeper (2+1)": 48,
 };
 
+// The only totals the seat-layout actually supports per bus type.
+const ALLOWED_SEATS_BY_TYPE: Record<BusType, number[]> = {
+  "Sleeper (2+1)": [36, 37],
+  "Seater (2+2)": [45],
+  "Seater/Sleeper (2+1)": [48],
+};
+
 function BusesPage() {
   const queryClient = useQueryClient();
   const busesQuery = useQuery({ queryKey: fleetKeys.buses, queryFn: listBuses });
@@ -428,12 +435,19 @@ function BusesPage() {
             onSubmit={(e) => {
               e.preventDefault();
               const fd = new FormData(e.currentTarget);
+              const typeIn = (fd.get("type") as BusType) || "Sleeper (2+1)";
+              const seatsIn = Number(fd.get("seats") || 0);
+              const allowed = ALLOWED_SEATS_BY_TYPE[typeIn];
+              if (!allowed.includes(seatsIn)) {
+                toast.error(`For ${typeIn} the total seats must be one of: ${allowed.join(", ")}`);
+                return;
+              }
               save.mutate({
                 no: String(fd.get("no") || ""),
                 name: String(fd.get("name") || ""),
-                type: (fd.get("type") as BusType) || "Sleeper (2+1)",
+                type: typeIn,
                 ac: (fd.get("ac") as ACType) || "AC",
-                seats: Number(fd.get("seats") || 0),
+                seats: seatsIn,
                 status: (fd.get("status") as Status) || "Active",
               });
             }}
@@ -500,6 +514,9 @@ function BusesPage() {
                 required
                 className="h-11 rounded-xl"
               />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Allowed totals for this type: {ALLOWED_SEATS_BY_TYPE[busType].join(", ")}
+              </p>
             </Field>
             <Field label="Status" required>
               <Select name="status" defaultValue={editing?.status ?? "Active"}>

@@ -39,6 +39,7 @@ import { errorMessage } from "@/lib/api/client";
 import { bookingsKey, cancelBooking } from "@/lib/api/bookings";
 import {
   fleetKeys,
+  listBuses,
   listSchedules,
   listTripSeats,
   scheduleBusType,
@@ -103,16 +104,17 @@ const AISLE_COL_22 = 2;
 const DOUBLE_COLS = [2, 3];
 const PAIR_COLS_22 = [0, 1, 3, 4];
 
-// Uniform sizing so every bus type has the SAME outer width (224px inner body)
-// and every bed is the SAME size (58x78 single, 130x78 double) on every bus/deck:
-//  2+1: [ single 58 ] [ aisle 24 ] [ double 130 ]
-//  2+2: [ seat 44 ] [ seat 44 ] [ aisle 24 ] [ seat 44 ] [ seat 44 ]
-const SEAT_W = 44; // px - single seater seat
-const SINGLE_W = 58; // px - single bed column (uniform bed width, slightly reduced)
-const DOUBLE_W = 130; // px - double bed column (spans 2 seat widths)
-const AISLE_W = 24; // px
-const BED_H = 78; // px - uniform bed height for every bed in every bus/deck
+// Every bed berth is the SAME width as a single bed (52 px) on every bus/deck:
+//  2+1: [ single 52 ] [ aisle 44 ] [ double 110 (= 2x52 + gap) ]
+//  2+2: [ seat 39 ] [ seat 39 ] [ aisle 44 ] [ seat 39 ] [ seat 39 ]
+// (reduced seat/bed widths, wider aisle)
 const GRID_GAP = 6; // px
+const SEAT_W = 39; // px - single seater seat
+const SINGLE_W = 52; // px - single bed column
+// Double bed = two berths; make each berth equal in width to a single bed.
+const DOUBLE_W = SINGLE_W * 2 + GRID_GAP; // 52x2 + 6 = 110px
+const AISLE_W = 44; // px
+const BED_H = 78; // px - uniform bed height for every bed in every bus/deck
 const GRID_COLS_22 = `${SEAT_W}px ${SEAT_W}px ${AISLE_W}px ${SEAT_W}px ${SEAT_W}px`;
 const GRID_WIDTH_21 = SINGLE_W + AISLE_W + DOUBLE_W + GRID_GAP * 2;
 const GRID_WIDTH_22 = SEAT_W * 4 + AISLE_W + GRID_GAP * 4;
@@ -243,6 +245,8 @@ function SeatLayoutsPage() {
   }, [schedulesQuery.data]);
   const trip = trips.find((t) => t.id === pickedTrip) ?? trips[0];
   const tripId = trip?.id ?? "";
+  const busesQuery = useQuery({ queryKey: fleetKeys.buses, queryFn: listBuses });
+  const tripBus = busesQuery.data?.find((b) => b.id === trip?.bus?.id);
 
   // Re-read every 5 seconds, so a seat an agent just sold turns booked here by itself.
   const seatsQuery = useQuery({
@@ -337,6 +341,27 @@ function SeatLayoutsPage() {
 
   // All seats of the current deck (filter only dims, so the layout keeps its shape)
   const deckSeats = seats.filter((s) => s.deck === deck);
+
+  // If the current trip's bus is a Sleeper with the L19 back berth (37 total seats),
+  // add it as a lower-deck sleeper at the last row, centered in the middle of both sides.
+  const backBerthEnabled =
+    (trip?.bus?.seating === "SLEEPER" || trip?.bus?.seating === "SLEEPER_BACK") &&
+    (tripBus?.seats ?? 0) === 37;
+  const backSeat: Seat | null =
+    backBerthEnabled && arrangement === "2-1" && deck === "lower"
+      ? {
+          id: "__back-berth__",
+          label: "L19",
+          row: 999,
+          col: AISLE_COL,
+          deck: "lower",
+          kind: "sleeper",
+          status: "available",
+          price: Number(trip?.fare ?? 0),
+          gender: "Any",
+        }
+      : null;
+  const displaySeats: Seat[] = backSeat ? [...deckSeats, backSeat] : deckSeats;
 
   const selectedSeat = seats.find((s) => s.id === selected) ?? null;
 
@@ -559,7 +584,7 @@ function SeatLayoutsPage() {
 
                     {/* Seats grid */}
                     <SeatGrid
-                      seats={deckSeats}
+                      seats={displaySeats}
                       deck={deck}
                       arrangement={arrangement}
                       statusFilter={statusFilter}
@@ -770,6 +795,10 @@ function SeatGrid({
     );
   }
 
+  // Extra back sleeper berth(s) carried at the last row, centered in the middle
+  // (col == aisle), only exist on the lower deck of the SLEEPER_BACK variant.
+  const backSeats = seats.filter((s) => s.col === AISLE_COL).sort((a, b) => a.row - b.row);
+
   // 2+1: two independent columns so beds / seats always span the same bus height.
   const singleSeats = seats.filter((s) => s.col === SINGLE_COL).sort((a, b) => a.row - b.row);
   const doubleSeats = seats.filter((s) => s.col === DOUBLE_COLS[0] || s.col === DOUBLE_COLS[1]);
@@ -851,6 +880,31 @@ function SeatGrid({
           })}
         </div>
       </div>
+
+      {/* Extra back sleeper berth (SLEEPER_BACK variant, lower deck only): centered in the middle of both sides, same size as a single sleeper */}
+      {deck === "lower" && backSeats.length > 0 && (
+        <div className="flex justify-center" style={{ width: GRID_WIDTH_21 }}>
+          {backSeats.map((seat) =>
+            seat.kind === "sleeper" ? (
+              <HorizontalBedCell
+                key={seat.id}
+                seat={seat}
+                selected={seat.id === selectedId}
+                dimmed={isDimmed(seat)}
+                onSelect={onSelect}
+              />
+            ) : (
+              <SeatCell
+                key={seat.id}
+                seat={seat}
+                selected={seat.id === selectedId}
+                dimmed={isDimmed(seat)}
+                onSelect={onSelect}
+              />
+            ),
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -972,6 +1026,46 @@ function BedCell({
       {/* Foot end */}
       <span className="h-1.5 w-4/5 rounded-sm bg-current opacity-10" />
 
+      {/* Tooltip */}
+      <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-navy text-navy-foreground text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition shadow-lg z-10">
+        {seatHint(seat)}
+      </span>
+    </button>
+  );
+}
+
+// Horizontally oriented berth (used for the back berth on the sleeper variant):
+// same dimensions as a single sleeper (78 x 52), just rotated to lie across the bus.
+function HorizontalBedCell({
+  seat,
+  selected,
+  dimmed,
+  onSelect,
+}: {
+  seat: Seat;
+  selected: boolean;
+  dimmed?: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const meta = STATUS_META[seat.status];
+  return (
+    <button
+      onClick={() => onSelect(seat.id)}
+      title={seatHint(seat)}
+      className={cn(
+        "group relative rounded-lg border-2 px-2 text-[11px] font-semibold transition-all duration-150",
+        "flex items-center justify-center gap-1",
+        "hover:-translate-y-0.5 hover:shadow-md",
+        seatStyle(seat),
+        selected && meta.selected,
+        dimmed && "opacity-25",
+      )}
+      style={{ width: BED_H, height: SINGLE_W }}
+    >
+      <span className="leading-none flex items-center gap-1 text-foreground">
+        {seat.label}
+        <GenderMark seat={seat} />
+      </span>
       {/* Tooltip */}
       <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-navy text-navy-foreground text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition shadow-lg z-10">
         {seatHint(seat)}
