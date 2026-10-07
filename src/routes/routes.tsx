@@ -857,11 +857,14 @@ function RoutesPage() {
                           {editing.busNo} — {editing.busName}
                         </SelectItem>
                       )}
-                      {busFleet.map((b) => (
-                        <SelectItem key={b.no} value={b.no}>
-                          {b.no} — {b.name} ({b.type})
-                        </SelectItem>
-                      ))}
+                      {/* Only buses in service; the trip's own bus stays listed whatever its state. */}
+                      {busFleet
+                        .filter((b) => b.status === "Active" || b.no === editing.busNo)
+                        .map((b) => (
+                          <SelectItem key={b.no} value={b.no}>
+                            {b.no} — {b.name} ({b.type})
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </Field>
@@ -1085,11 +1088,14 @@ function RoutesPage() {
                   <SelectValue placeholder="Select bus" />
                 </SelectTrigger>
                 <SelectContent>
-                  {busFleet.map((b) => (
-                    <SelectItem key={b.no} value={b.no}>
-                      {b.no} · {b.name}
-                    </SelectItem>
-                  ))}
+                  {/* Buses under maintenance or inactive cannot be given a route. */}
+                  {busFleet
+                    .filter((b) => b.status === "Active")
+                    .map((b) => (
+                      <SelectItem key={b.no} value={b.no}>
+                        {b.no} · {b.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
               <input type="hidden" name="bus" value={assignedBusNo} />
