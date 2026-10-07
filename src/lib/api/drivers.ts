@@ -1,4 +1,5 @@
 import { api } from "./client";
+import type { TripOption } from "./conductors";
 
 export interface Driver {
   id: string;
@@ -7,10 +8,13 @@ export interface Driver {
   licenseNo: string;
   experienceYears: number;
   isActive: boolean;
+  /** Next upcoming trip this driver is assigned to. */
+  trip: TripOption | null;
   createdAt: string;
 }
 
-export type DriverInput = Omit<Driver, "id" | "createdAt">;
+/** tripId null clears the assignment. */
+export type DriverInput = Omit<Driver, "id" | "createdAt" | "trip"> & { tripId?: string | null };
 
 export const driverKeys = { list: ["drivers"] as const };
 

@@ -17,6 +17,7 @@ export interface TripOption {
 
 export interface UpcomingTrip extends TripOption {
   conductor: { id: string; name: string } | null;
+  driver: { id: string; name: string } | null;
 }
 
 export interface Conductor {
@@ -42,7 +43,7 @@ export type ConductorUpdate = Partial<ConductorInput> & { tripId?: string | null
 export const conductorKeys = {
   list: ["conductors"] as const,
   buses: ["buses", "options"] as const,
-  trips: (busId: string) => ["trips", "upcoming", busId] as const,
+  allTrips: ["trips", "upcoming"] as const,
 };
 
 // ponytail: one page of 100 and search in the browser; move to server search + paging when an operator has more conductors than that.
@@ -59,8 +60,10 @@ export const deleteConductor = (id: string) => api<void>(`/conductors/${id}`, { 
 
 export const listBusOptions = () => api<{ items: BusOption[] }>("/buses").then((r) => r.items);
 
-export const listUpcomingTrips = (busId: string) =>
-  api<{ items: UpcomingTrip[] }>(`/trips?busId=${busId}`).then((r) => r.items);
+// ponytail: the next 100 trips of the company in one go; the forms filter by bus in the
+// browser. Ask the server per bus again if an operator schedules more than that ahead.
+export const listUpcomingTrips = () =>
+  api<{ items: UpcomingTrip[] }>("/trips?limit=100").then((r) => r.items);
 
 const dateTime = new Intl.DateTimeFormat("en-IN", {
   timeZone: "Asia/Kolkata",
