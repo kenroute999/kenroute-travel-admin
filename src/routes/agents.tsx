@@ -255,6 +255,10 @@ function AgentsPage() {
                 pattern="[6-9][0-9]{9}"
                 title="Enter a 10-digit mobile number"
                 maxLength={10}
+                onInput={(e) => {
+                  const el = e.currentTarget;
+                  el.value = el.value.replace(/\D/g, "").slice(0, 10);
+                }}
                 className="h-11 rounded-xl"
               />
             </Field>

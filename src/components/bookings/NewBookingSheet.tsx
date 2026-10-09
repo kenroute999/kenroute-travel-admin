@@ -114,7 +114,9 @@ export function NewBookingSheet({
     form.name.trim().length >= 2 &&
     Number(form.age) >= 1 &&
     /^\d{10}$/.test(form.phone.trim()) &&
-    form.idProofNumber.trim().length >= 5 &&
+    (form.idProofType === "AADHAAR"
+      ? /^\d{12}$/.test(form.idProofNumber.trim())
+      : form.idProofNumber.trim().length >= 5) &&
     !!form.boardingPoint.trim() &&
     !!form.droppingPoint.trim();
 
@@ -260,11 +262,23 @@ export function NewBookingSheet({
                 ))}
               </select>
             </Field>
-            <Field label="ID Number" required>
+            <Field
+              label="ID Number"
+              required
+              hint={form.idProofType === "AADHAAR" ? "12 digits" : undefined}
+            >
               <Input
                 value={form.idProofNumber}
-                maxLength={20}
-                onChange={(e) => set({ idProofNumber: e.target.value })}
+                inputMode={form.idProofType === "AADHAAR" ? "numeric" : undefined}
+                maxLength={form.idProofType === "AADHAAR" ? 12 : 20}
+                onChange={(e) =>
+                  set({
+                    idProofNumber:
+                      form.idProofType === "AADHAAR"
+                        ? e.target.value.replace(/\D/g, "").slice(0, 12)
+                        : e.target.value,
+                  })
+                }
               />
             </Field>
           </div>

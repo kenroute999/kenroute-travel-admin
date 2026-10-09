@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { useSession } from "@/lib/session";
 import logo from "@/assets/kenroute-logo.png";
 
 export const Route = createFileRoute("/settings")({
@@ -12,14 +13,39 @@ export const Route = createFileRoute("/settings")({
   component: SettingsPage,
 });
 
-function Field({ label, value, type = "text" }: { label: string; value: string; type?: string }) {
+function Field({
+  label,
+  value,
+  type = "text",
+  placeholder,
+  numeric = false,
+  maxLength,
+}: {
+  label: string;
+  value?: string;
+  type?: string;
+  placeholder?: string;
+  numeric?: boolean;
+  maxLength?: number;
+}) {
   return (
     <label className="block">
       <span className="text-sm font-medium text-foreground">{label}</span>
       <input
         type={type}
         defaultValue={value}
-        className="mt-1.5 w-full h-11 rounded-lg border border-border bg-background px-4 text-sm outline-none focus:border-brand"
+        placeholder={placeholder}
+        inputMode={numeric ? "numeric" : undefined}
+        maxLength={maxLength}
+        onInput={
+          numeric
+            ? (e) => {
+                const el = e.currentTarget;
+                el.value = el.value.replace(/\D/g, "").slice(0, maxLength ?? 10);
+              }
+            : undefined
+        }
+        className="mt-1.5 w-full h-11 rounded-lg border border-border bg-background px-4 text-sm outline-none focus:border-brand placeholder:text-muted-foreground"
       />
     </label>
   );
@@ -43,6 +69,9 @@ function Toggle({ label, desc, on = false }: { label: string; desc: string; on?:
 }
 
 function SettingsPage() {
+  const { session } = useSession();
+  const company = session?.user.operatorName?.trim();
+  const role = session?.user.role === "OWNER" ? "Owner" : "Admin";
   return (
     <>
       <PageHeader title="Settings" breadcrumb="Settings" subtitle="Manage your account and operational preferences" />
@@ -54,8 +83,8 @@ function SettingsPage() {
               <img src={logo} alt="KenRoute" className="size-full object-contain" />
             </div>
             <div>
-              <div className="font-semibold">KenRoute Travels</div>
-              <div className="text-xs text-muted-foreground">Super Admin · Hyderabad</div>
+              <div className="font-semibold">{company || "Company name"}</div>
+              <div className="text-xs text-muted-foreground">{role}</div>
             </div>
           </div>
           <nav className="mt-6 space-y-1 text-sm">
@@ -71,12 +100,12 @@ function SettingsPage() {
           <div className="bg-card rounded-2xl border border-border p-6 shadow-sm">
             <h2 className="text-lg font-semibold mb-5">Company Profile</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field label="Company Name" value="KenRoute Travels Pvt. Ltd." />
-              <Field label="GSTIN" value="36ABCDE1234F1Z5" />
-              <Field label="Contact Email" value="ops@kenroute.com" type="email" />
-              <Field label="Phone" value="+91 98765 43210" />
-              <Field label="Currency" value="INR (₹)" />
-              <Field label="Timezone" value="Asia/Kolkata" />
+              <Field label="Company Name" placeholder="Enter company name" />
+              <Field label="GSTIN" placeholder="Enter GSTIN" />
+              <Field label="Contact Email" placeholder="Enter contact email" type="email" />
+              <Field label="Phone" placeholder="Enter phone number" type="tel" numeric maxLength={10} />
+              <Field label="Currency" placeholder="Enter currency" />
+              <Field label="Timezone" placeholder="Enter timezone" />
             </div>
             <div className="mt-6 flex justify-end gap-2">
               <button className="px-4 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-muted">Cancel</button>

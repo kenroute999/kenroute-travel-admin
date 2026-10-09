@@ -66,7 +66,7 @@ export const Route = createFileRoute("/integrations")({
   component: IntegrationsPage,
 });
 
-// ───────────────────────────── Types & mock data ────────────────────────────
+// ───────────────────────────── Types & data ────────────────────────────
 
 type IntegrationStatus = "Ready" | "Pending" | "Configured" | "Connected" | "Error";
 type IntegrationId = "redbus" | "abhibus";
@@ -115,10 +115,10 @@ const INITIAL: Integration[] = [
 ];
 
 const READINESS = [
-  { label: "Routes Configured", value: 42, total: 42, icon: RouteIcon, ready: true },
-  { label: "Buses Configured", value: 28, total: 28, icon: Bus, ready: true },
-  { label: "Seat Layouts Ready", value: 18, total: 20, icon: Armchair, ready: true },
-  { label: "Pricing Ready", value: 36, total: 42, icon: Tag, ready: false },
+  { label: "Routes Configured", value: 0, total: 0, icon: RouteIcon, ready: false },
+  { label: "Buses Configured", value: 0, total: 0, icon: Bus, ready: false },
+  { label: "Seat Layouts Ready", value: 0, total: 0, icon: Armchair, ready: false },
+  { label: "Pricing Ready", value: 0, total: 0, icon: Tag, ready: false },
   { label: "API Credentials", value: 0, total: 2, icon: KeyRound, ready: false },
 ];
 
@@ -129,7 +129,7 @@ const CHANNELS = [
     bookings: 0,
     revenue: 0,
     growth: 0,
-    projected: { bookings: 1240, revenue: 1860000 },
+    projected: { bookings: 0, revenue: 0 },
     accent: "bg-danger",
     text: "text-danger",
   },
@@ -139,7 +139,7 @@ const CHANNELS = [
     bookings: 0,
     revenue: 0,
     growth: 0,
-    projected: { bookings: 860, revenue: 1290000 },
+    projected: { bookings: 0, revenue: 0 },
     accent: "bg-chart-5",
     text: "text-chart-5",
   },
@@ -153,12 +153,7 @@ interface SyncEvent {
   time: string;
 }
 
-const SEED_LOG: SyncEvent[] = [
-  { id: "1", channel: "System", message: "Integration workspace initialized for OTA partners.", type: "info", time: "Today · 09:12 AM" },
-  { id: "2", channel: "redBus", message: "Inventory mapping prepared for 28 buses across 42 routes.", type: "success", time: "Today · 09:14 AM" },
-  { id: "3", channel: "AbhiBus", message: "API credentials pending — awaiting partner approval.", type: "warning", time: "Yesterday · 06:40 PM" },
-  { id: "4", channel: "redBus", message: "Seat layout validation completed for 18 / 20 buses.", type: "success", time: "Yesterday · 04:22 PM" },
-];
+const SEED_LOG: SyncEvent[] = [];
 
 // ───────────────────────────── Config schema ────────────────────────────────
 
@@ -294,7 +289,7 @@ function IntegrationsPage() {
     );
     const total = adjusted.reduce((a, r) => a + r.total, 0);
     const done = adjusted.reduce((a, r) => a + r.value, 0);
-    return { pct: Math.round((done / total) * 100), rows: adjusted };
+    return { pct: total === 0 ? 0 : Math.round((done / total) * 100), rows: adjusted };
   }, [store]);
 
   function pushLog(channel: SyncEvent["channel"], message: string, type: SyncEvent["type"]) {
@@ -478,7 +473,7 @@ function IntegrationsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {readinessPct.rows.map((r) => {
-              const pct = Math.round((r.value / r.total) * 100);
+              const pct = r.total === 0 ? 0 : Math.round((r.value / r.total) * 100);
               const ready = pct === 100;
               return (
                 <div key={r.label} className="rounded-xl border border-border p-4 hover:bg-muted/40 transition-colors">
